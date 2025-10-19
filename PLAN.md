@@ -1,390 +1,370 @@
-# Trifle - Browser-based Python3 Playground
+# Trifle - Local-First Python3 Playground
 
-A web application for creating, editing, and running Python3 programs entirely in the browser using Pyodide (WebAssembly Python).
+A local-first web application for creating, editing, and running Python3 programs entirely in the browser using Pyodide (WebAssembly Python). Works offline, syncs when online.
 
 ## Project Overview
 
 **Name**: Trifle (individual programs are called "Trifles")
 
-**Core Concept**:
-- Python3 playground running entirely in browser via Pyodide
-- Open-source editor (Ace)
-- Restricted to allowlisted users (Google OAuth)
-- Multiple files per project with folder support
-- All code execution happens client-side (no server-side Python)
+**Core Principles**:
+- **Local-first**: All data stored in browser IndexedDB, works 100% offline
+- **Content-addressable**: Git-style immutable content storage
+- **Optional sync**: Sign in with Google only when you want to sync/share
+- **Simple**: No CRDTs, honest conflict resolution ("you decide")
+
+**Architecture**:
+```
+┌─────────────────────────────────────┐
+│  Browser (Primary Data Store)       │
+│  ┌────────────────────────────────┐ │
+│  │ IndexedDB                      │ │
+│  │  - trifles: {id, hash, ...}   │ │
+│  │  - users: {id, email, hash}   │ │
+│  │  - content: {hash → blob}     │ │
+│  └────────────────────────────────┘ │
+│         ↕ (optional sync)            │
+│  ┌────────────────────────────────┐ │
+│  │ Pyodide (Python3 runtime)     │ │
+│  └────────────────────────────────┘ │
+└─────────────────────────────────────┘
+         ↕ (optional)
+┌─────────────────────────────────────┐
+│  Server (Sync Target, Flat Files)   │
+│  data/                               │
+│    content/{hash}  ← immutable blobs│
+│    users/{id}.json ← pointers       │
+│    trifles/{id}.json ← pointers     │
+└─────────────────────────────────────┘
+```
 
 ## Tech Stack
 
-- **Backend**: Go 1.25+
-- **Frontend**: Vanilla JavaScript (consider htmx if it fits)
+- **Backend**: Go 1.25+ (simple sync server, no database)
+- **Frontend**: Vanilla JavaScript
 - **Editor**: Ace Editor (from CDN)
 - **Python Runtime**: Pyodide (WebAssembly, from CDN)
-- **Database**: SQLite via `database/sql` + driver (generic SQL, DB-agnostic where possible)
-- **SQL Code Generation**: [sqlc](https://sqlc.dev/) - all SQL in one package, type-safe generated Go code
-- **Database Migrations**: [goose](https://github.com/pressly/goose) - embedded migrations, simple and reliable
-- **Authentication**: Google OAuth 2.0
-- **CSRF Protection**: Go 1.25's built-in CSRF middleware ([reference](https://www.alexedwards.net/blog/preventing-csrf-in-go))
-- **Deployment**: Single Go binary with embedded static files, behind Caddy reverse proxy
-- **Production URL**: https://trifle.greenseptember.com (Caddy terminates TLS)
+- **Client Storage**: IndexedDB (primary data store)
+- **Server Storage**: Flat files (content-addressable)
+- **Authentication**: Google OAuth 2.0 (optional, only for sync)
+- **Deployment**: Single Go binary, flat file storage
 
-## Secrets Configuration
+## Content-Addressable Data Model
 
-All secrets stored in 1Password under "Shared/Trifle":
+Everything is immutable content addressed by SHA-256 hash:
 
-1. **Google OAuth Client Secret**: `op read "op://Shared/Trifle/Google OAuth Client Secret"`
-2. **3DES ID Encryption Key**: `op read "op://Shared/Trifle/3DES ID Key"` (48 hex chars = 24 bytes)
+### Client-side (IndexedDB)
 
-## Google OAuth Configuration
+```javascript
+// Object stores
+"users": {
+  id: "user_abc123",           // Random ID
+  email: "user@example.com",   // null if not logged in
+  current_hash: "sha256...",   // Pointer to user data blob
+  last_modified: timestamp,
+  logical_clock: 15            // Monotonic counter
+}
 
-- **Client ID**: `957488163855-57odpu7dd2e9f9m44teermhuti95s43r.apps.googleusercontent.com`
-- **Development**:
-  - Authorized Origins: `http://localhost:3000`
-  - Redirect URI: `http://localhost:3000/auth/callback`
-- **Production** (will need to add to Google Console):
-  - Authorized Origins: `https://trifle.greenseptember.com`
-  - Redirect URI: `https://trifle.greenseptember.com/auth/callback`
+"trifles": {
+  id: "trifle_xyz789",         // Random ID
+  owner_id: "user_abc123",     // User who owns this
+  current_hash: "sha256...",   // Pointer to trifle data blob
+  last_modified: timestamp,
+  logical_clock: 42
+}
 
-## Data Model
+"content": {
+  hash: "sha256...",           // SHA-256 of content
+  data: <blob>,                // The actual content (JSON or bytes)
+  type: "trifle"|"user"|"file" // Content type
+}
 
-### ID Format Convention
-
-All exposed IDs use **Stripe/GitHub-style prefixed random hex strings**:
-
-**Approach**: Generate random hex IDs on creation
-- Generate cryptographically random hex digits
-- Prefix with entity type for type safety and debugging
-- Store full prefixed ID as TEXT PRIMARY KEY in database
-- Retry on collision (extremely rare with sufficient length)
-
-**Format**: `{prefix}_{random_hex}`
-- `trifle_{8_hex}` - Trifle IDs (e.g., `trifle_a3f9c2b8`) - short for nice URLs
-- `account_{12_hex}` - Account IDs (e.g., `account_7b2e8f3a9c1d`)
-- `login_{12_hex}` - Login IDs (e.g., `login_f8a3c2b9e1d4`)
-- `file_{12_hex}` - File IDs (e.g., `file_d4a9b7c3e8f2`)
-
-**Benefits**:
-- Prevents German Tank Problem (random reveals no count info)
-- Type-safe IDs in logs and debugging
-- Flexible lengths per entity type
-- Simple implementation (no crypto needed)
-- Can change approach later if needed
-
-### Tables
-
-#### `logins`
-Represents Google OAuth identities
-- `id` - TEXT PRIMARY KEY (e.g., `login_f8a3c2b9e1d4`)
-- `google_id` - TEXT UNIQUE - Google user ID
-- `email` - TEXT - User's email address
-- `name` - TEXT - Display name from Google
-- `created_at` - TIMESTAMP
-
-#### `accounts`
-Represents entities that own Trifles (separated from logins for future multi-user support)
-- `id` - TEXT PRIMARY KEY (e.g., `account_7b2e8f3a9c1d`)
-- `display_name` - TEXT UNIQUE - Auto-generated adjective-noun name (e.g., "purple-dinosaur")
-- `created_at` - TIMESTAMP
-- `updated_at` - TIMESTAMP
-
-#### `account_members`
-Links logins to accounts (one-to-one in V1, but designed for future multi-user)
-- `id` - TEXT PRIMARY KEY
-- `account_id` - TEXT - Foreign key to accounts
-- `login_id` - TEXT - Foreign key to logins
-- `role` - TEXT - Role string (e.g., "owner", "editor") - just "owner" for V1
-- `created_at` - TIMESTAMP
-- UNIQUE constraint on (account_id, login_id)
-
-#### `trifles`
-Individual Python projects/programs
-- `id` - TEXT PRIMARY KEY (e.g., `trifle_a3f9c2b8`)
-- `account_id` - TEXT - Foreign key to accounts
-- `title` - TEXT - User-provided title
-- `description` - TEXT - Optional description (nullable)
-- `parent_id` - TEXT - Foreign key to trifles (for future cloning/remixing, nullable)
-- `created_at` - TIMESTAMP
-- `updated_at` - TIMESTAMP
-
-#### `trifle_files`
-Files within a Trifle (supports folders via path)
-- `id` - TEXT PRIMARY KEY (e.g., `file_d4a9b7c3e8f2`)
-- `trifle_id` - TEXT - Foreign key to trifles
-- `path` - TEXT - File path within project (e.g., "main.py", "utils/helper.py")
-- `content` - TEXT - File contents
-- `created_at` - TIMESTAMP
-- `updated_at` - TIMESTAMP
-- UNIQUE constraint on (trifle_id, path)
-
-#### `email_allowlist`
-Controls who can log in
-- `id` - INTEGER PRIMARY KEY AUTOINCREMENT (internal only, never exposed)
-- `pattern` - TEXT - Email or domain pattern (e.g., "zellyn@gmail.com" or "@misstudent.com")
-- `type` - TEXT - "email" or "domain"
-- `created_at` - TIMESTAMP
-- UNIQUE constraint on (pattern, type)
-
-### Initial Allowlist Data
-- Individual email: `zellyn@gmail.com`
-- Domain: `@misstudent.com`
-
-## Architecture
-
-### Backend (Go)
-
-**Pattern**: Single goroutine handles all database access via channels to ensure thread safety.
-
-**Database Access Strategy**:
-- Use [sqlc](https://sqlc.dev/) for type-safe, generated Go code from SQL
-- All SQL queries in one package (`internal/db/queries.sql`)
-- Schema migrations in `internal/db/schema.sql`
-- Generic SQL where possible (avoid SQLite-specific features) for future DB portability
-- Generated code handles parameter binding and row scanning
-
-**Key Components**:
-1. **Database Manager Goroutine**:
-   - Runs in background, receives requests via channel
-   - Executes all SQLite operations using sqlc-generated code
-   - Returns results via response channels
-
-2. **ID Generation**:
-   - Cryptographically random hex strings with type prefixes
-   - Helper functions in `internal/db/ids.go`
-   - Collision retry logic (though extremely rare)
-
-3. **HTTP Server**:
-   - Serves embedded static files
-   - Provides API endpoints
-   - Handles OAuth flow
-   - Uses Go 1.25 CSRF middleware
-
-4. **OAuth Handler**:
-   - Initiates Google OAuth flow
-   - Handles callback
-   - Verifies email against allowlist BEFORE creating session
-   - Creates Login + Account + AccountMember on first login
-   - Generates adjective-noun display name (ensures uniqueness)
-
-5. **Session Management**:
-   - Use secure HTTP-only cookies
-   - Session data in memory (or SQLite if preferred)
-
-### Frontend (Vanilla JS)
-
-**Pages/Views**:
-1. **Login Page**: Google Sign-In button
-2. **Trifle List**: Browse user's Trifles, create new
-3. **Trifle Editor**: Main workspace
-
-**Trifle Editor Layout**:
-```
-+----------------------------------------------------------+
-|  Navbar: [Trifle Logo] [Title]           [User] [Logout]|
-+----------------------------------------------------------+
-| File    |                                                 |
-| Tree    |  Ace Editor                                     |
-|         |  (resizable)                                    |
-|  📁 /   |                                                 |
-|  📄main.|                                                 |
-|  📄util.|                                                 |
-|         +--------------------------------------------------+
-|         |  Output Console                                 |
-|         |  (Python stdout/stderr)                         |
-|         |  [Run Button]                                   |
-+---------+--------------------------------------------------+
+"versions": {
+  trifle_id: "trifle_xyz789",
+  hash: "sha256...",
+  timestamp: timestamp,
+  label: "session" | "checkpoint" // Type of version
+}
 ```
 
-**Key Frontend Features**:
-- Ace Editor with Python syntax highlighting
-- Custom-built file tree (Ace doesn't include one)
-  - Parse file paths into tree structure
-  - Vanilla JS rendering with expand/collapse
-  - Click to open file in editor
-  - Add/delete/rename file actions
-- Resizable editor/console split
-- "Run" button executes main.py via Pyodide
-- Auto-save (debounced, triggers ~1s after typing stops)
-- Load Ace and Pyodide from CDNs
+### User Data Blob (at hash)
+```json
+{
+  "display_name": "Curious Coder",
+  "avatar": {
+    "head": "round",
+    "eyes": "happy",
+    "hair": "curly"
+  },
+  "settings": {
+    "auto_sync": false,
+    "theme": "dark",
+    "auto_save_interval": 60
+  }
+}
+```
+
+### Trifle Data Blob (at hash)
+```json
+{
+  "name": "My First Program",
+  "description": "Learning Python!",
+  "files": [
+    {"path": "main.py", "hash": "sha256..."},
+    {"path": "utils.py", "hash": "sha256..."}
+  ]
+}
+```
+
+### File Content Blob (at hash)
+```
+print("Hello, world!")
+```
+
+### Server-side (Flat Files)
+
+```
+data/
+  content/
+    ab/
+      cd/
+        abcdef123456...  # Content blobs (SHA-256 hash)
+  users/
+    user_abc123.json   # {email, current_hash, updated_at, logical_clock}
+  trifles/
+    trifle_xyz789.json # {id, owner_id, current_hash, updated_at, logical_clock}
+```
+
+**Why flat files?**
+- Simple: No database to configure/migrate
+- Debuggable: Just look at files on disk
+- Scalable enough: 10K users × 10 trifles × 10 files = ~1M blobs
+  - With 2-level directory nesting: ~15 files per directory
+- Immutable content: Perfect for filesystem caching
+- Easy backup: Just tar the data/ directory
+
+## Versioning Strategy
+
+**Auto-save to IndexedDB**: Every 1 second after typing stops (never lose work)
+
+**Version snapshots** (in "versions" store):
+1. **Session versions**: Created on "Save/Sync" click (or auto-sync trigger)
+   - If last version < 30 minutes ago: Overwrite it (same session)
+   - If last version > 30 minutes ago: Create new version (new session)
+   - Keep last 10 session versions
+
+2. **Future**: Intermediate checkpoints every 5 minutes between sessions
+   - GC'd after 2 new sessions created
+   - (Implement only if users need "undo 20 minutes ago")
+
+## Profile Merge on Login
+
+**Scenario**: User creates trifles anonymously, then signs in with Google
+
+1. User works locally with `user_local123` (no email)
+2. User clicks "Sign in to sync"
+3. Server finds existing user with that email → `user_server456`
+4. **Merge strategy**:
+   - Server's user profile wins (it's the canonical identity)
+   - EXCEPT: If local has designed avatar and server doesn't, port it over
+   - All local trifles get `owner_id` updated to `user_server456`
+   - Upload local trifles to server
+   - Delete local user, keep server user
+
+## Sync Protocol
+
+### Initial Sync (Download from Server)
+
+```
+GET /api/sync/state
+→ {
+    user: {id, email, hash, updated_at, logical_clock},
+    trifles: [
+      {id, owner_id, hash, updated_at, logical_clock},
+      ...
+    ]
+  }
+
+POST /api/sync/download
+  {hashes: ["sha256...", "sha256..."]}
+→ {
+    content: {
+      "sha256...": <blob>,
+      "sha256...": <blob>
+    }
+  }
+```
+
+### Upload Changes to Server
+
+```
+POST /api/sync/upload
+  {
+    content: {
+      "sha256...": <blob>,
+      "sha256...": <blob>
+    }
+  }
+→ {uploaded: ["sha256...", ...]}
+
+PUT /api/sync/trifle/:id
+  {
+    current_hash: "sha256...",
+    last_known_hash: "sha256...",  // For conflict detection
+    updated_at: timestamp,
+    logical_clock: 43
+  }
+→ 200 OK {synced: true}
+→ 409 Conflict {server_hash: "sha256...", conflict: true}
+```
+
+### Conflict Resolution
+
+**Detection**: Client sends `last_known_hash`, server compares to `current_hash`
+
+**If conflict**:
+1. Server returns 409 with server's current hash
+2. Client downloads server version
+3. Client shows modal:
+   ```
+   Conflict: This trifle was edited on another device
+
+   Your version (modified 5 minutes ago):
+   - main.py (changed)
+   - utils.py (unchanged)
+
+   Server version (modified 3 minutes ago):
+   - main.py (changed)
+   - helper.py (new file)
+
+   [Keep Mine] [Keep Server's] [View Diff]
+   ```
+4. User chooses resolution
+5. Winning version becomes new `current_hash`
 
 ## API Endpoints
 
-### Authentication
+### Anonymous (No Auth Required)
+- `GET /` - Serve frontend (works offline after first load)
+
+### Sync (Google OAuth Required)
 - `GET /auth/login` - Redirect to Google OAuth
-- `GET /auth/callback` - OAuth callback, verify allowlist, create session
+- `GET /auth/callback` - OAuth callback, create/merge user
 - `POST /auth/logout` - Clear session
 
-### Account Management
-- `POST /api/account/reroll-name` - Generate new display name
+- `GET /api/sync/state` - Get user + trifles metadata
+- `POST /api/sync/download` - Download content blobs by hash
+- `POST /api/sync/upload` - Upload content blobs
+- `PUT /api/sync/user` - Update user pointer (profile changes)
+- `PUT /api/sync/trifle/:id` - Update trifle pointer (with conflict detection)
+- `DELETE /api/sync/trifle/:id` - Delete trifle from server
 
-### Trifles
-- `GET /api/trifles` - List all user's Trifles
-- `POST /api/trifles` - Create new Trifle (returns ID)
-- `GET /api/trifles/:id` - Get Trifle metadata + all files
-- `PUT /api/trifles/:id` - Update Trifle metadata (title, description)
-- `DELETE /api/trifles/:id` - Delete Trifle
+### Future: Sharing
+- `GET /t/:id` - Public view of trifle (read-only)
+- `POST /api/trifles/:id/fork` - Clone someone else's trifle
 
-### Trifle Files
-- `GET /api/trifles/:id/files` - List all files in Trifle
-- `PUT /api/trifles/:id/files` - Batch update files (for auto-save)
-- `POST /api/trifles/:id/files` - Create new file
-- `DELETE /api/trifles/:id/files` - Delete file (by path in query param)
+## Implementation Phases
 
-## Execution Model
+### Phase 1: Local-Only (No Server, No Auth)
 
-- All Python code runs **client-side** via Pyodide
-- No server-side Python execution
-- Output captured and displayed in console
-- `main.py` is the entry point when "Run" is clicked
-- Future: Support for micropip to install packages
+**Goal**: Fully functional offline Python playground
 
-## V1 Scope (MVP)
+**Client (IndexedDB + Pyodide)**:
+1. Set up IndexedDB schema (users, trifles, content, versions)
+2. Create anonymous user on first visit with random display name
+3. Generate name from adjective-noun list (allow re-roll)
+4. Create/edit/delete trifles (all stored locally)
+5. Content-addressable storage (SHA-256 hashing)
+6. Integrate Ace Editor
+7. Integrate Pyodide for Python execution
+8. File tree UI for multi-file trifles
+9. Auto-save to IndexedDB (1 second debounce)
+10. Version snapshots (session-based, keep 10)
+11. Manual "Save" button (creates version snapshot)
 
-### Included
-✅ Google OAuth login with allowlist enforcement
-✅ Reject disallowed emails immediately (no access request page)
-✅ Auto-generated adjective-noun account display names
-✅ Ability to re-roll display name
-✅ Create/edit/delete Trifles
-✅ Multiple files per Trifle with folder support (via paths)
-✅ Ace editor with Python syntax highlighting
-✅ Run Python3 code via Pyodide
-✅ Output console for stdout/stderr
-✅ Auto-save (debounced)
-✅ `main.py` as designated entry point
-✅ Single binary deployment with embedded static files
-✅ SQLite database in `./data/`
+**At this point**: Fully functional local app, no server needed!
 
-### Deferred to Later
-⏭️ Autocomplete in editor
-⏭️ micropip package installation
-⏭️ Turtle graphics (custom implementation)
-⏭️ Sharing/public links
-⏭️ Clone/remix functionality (but DB schema supports it via parent_id)
-⏭️ Folders to organize Trifles (flat list for now)
-⏭️ Multi-user accounts (but DB schema supports it)
-⏭️ Admin UI to manage allowlist
+**Deliverable**: Visit `pytrifle.org`, instantly start coding Python
 
-## Implementation Steps
+### Phase 2: Server + Sync
 
-### Phase 1: Foundation
-1. Initialize Go module and project structure
-2. Set up SQLite schema with migrations
-3. Implement database manager goroutine pattern
-4. Create initial allowlist entries
+**Goal**: Optional cloud backup/sync
 
-### Phase 2: Authentication
-5. Implement Google OAuth flow
-6. Add allowlist checking
-7. Create Login + Account + AccountMember on first login
-8. Implement adjective-noun name generator
-9. Add session management
+**Server (Go + Flat Files)**:
+1. Flat file storage structure (`data/content/`, `data/users/`, `data/trifles/`)
+2. Content upload endpoint (dedupe by hash)
+3. Content download endpoint (batch fetch)
+4. User/Trifle pointer update endpoints
+5. Google OAuth flow (only for sync)
+6. Profile merge logic (local → server on first login)
 
-### Phase 3: Backend API
-10. Implement Trifle CRUD endpoints
-11. Implement file CRUD endpoints
-12. Add account name re-roll endpoint
+**Client**:
+1. "Sign in to sync" button
+2. Sync UI (manual "Sync Now" button)
+3. Upload local trifles to server
+4. Download server trifles to local
+5. Show sync status (synced/unsynced indicator)
 
-### Phase 4: Frontend - Basic Structure
-13. Create HTML templates (or embed single-page app)
-14. Set up routing (login, list, editor views)
-15. Implement login page with Google button
+**Deliverable**: Users can sync across devices
 
-### Phase 5: Frontend - Trifle List
-16. Build Trifle list view
-17. Add "New Trifle" functionality
+### Phase 3: Conflict Resolution
 
-### Phase 6: Frontend - Editor
-18. Integrate Ace Editor from CDN
-19. Build file tree UI
-20. Implement file add/delete/rename
-21. Add resizable split pane
-22. Integrate Pyodide from CDN
-23. Implement "Run" button with output capture
-24. Add auto-save with debouncing
+**Goal**: Handle multi-device editing gracefully
 
-### Phase 7: Polish
-25. Error handling and validation
-26. Loading states and UX improvements
-27. Test with multiple users
-28. Documentation
+**Server**:
+1. Logical clock comparison for conflict detection
+2. Return 409 Conflict with server state
 
-## File Structure
+**Client**:
+1. Detect conflicts (last_known_hash ≠ server hash)
+2. Download both versions
+3. Show conflict resolution UI:
+   - File-by-file diff view
+   - "Keep mine" / "Keep server's" / "Pick per file"
+4. Resolve and re-upload
 
-```
-trifle/
-├── PLAN.md                 # This file
-├── README.md               # User-facing docs
-├── go.mod
-├── go.sum
-├── sqlc.yaml              # sqlc configuration
-├── main.go                 # Entry point
-├── data/                   # Created at runtime
-│   └── trifle.db          # SQLite database
-├── internal/
-│   ├── db/
-│   │   ├── migrations/    # Goose migrations (embedded)
-│   │   │   └── 00001_initial_schema.sql
-│   │   ├── queries.sql    # All SQL queries (sqlc input)
-│   │   ├── db.go          # sqlc-generated code (output)
-│   │   ├── models.go      # sqlc-generated models (output)
-│   │   ├── querier.go     # sqlc-generated interface (output)
-│   │   ├── manager.go     # DB manager goroutine wrapper
-│   │   └── ids.go         # ID generation utilities
-│   ├── auth/
-│   │   ├── oauth.go       # Google OAuth handling
-│   │   ├── session.go     # Session management
-│   │   └── allowlist.go   # Allowlist checking
-│   ├── api/
-│   │   ├── handlers.go    # HTTP handlers
-│   │   ├── trifles.go     # Trifle endpoints
-│   │   └── middleware.go  # Auth + CSRF middleware
-│   └── namegen/
-│       └── namegen.go     # Adjective-noun generator
-└── web/                   # Frontend (embedded)
-    ├── index.html
-    ├── css/
-    │   └── style.css
-    └── js/
-        ├── app.js         # Main app logic
-        ├── editor.js      # Editor integration
-        ├── pyodide.js     # Pyodide integration
-        └── ui.js          # UI components
-```
+**Deliverable**: Safe multi-device editing
 
-## Reference Implementation
+### Phase 4: Polish
 
-Inspiration from: https://github.com/alexprengere/python_playground/blob/main/index.html
-- Single-file example using Ace + Pyodide
-- We'll modernize and split into proper structure
-- Add persistence, auth, multi-file support
+**Features**:
+1. Avatar designer (pick head/eyes/hair/etc)
+2. Settings UI (auto-sync on/off, theme, etc)
+3. Trifle list with search/sort
+4. Version history browser ("rewind to yesterday")
+5. Public sharing (read-only links)
+6. Fork/remix trifles
+7. Canvas graphics output (turtle-style drawing)
 
 ## Security Considerations
 
-1. **Allowlist Enforcement**: Check on every login, reject disallowed emails immediately
-2. **Session Security**: HTTP-only, secure cookies (SameSite=Lax or Strict)
-3. **CSRF Protection**: Use Go 1.25's built-in CSRF middleware for all mutating endpoints
-4. **Input Validation**: Validate all API inputs (title lengths, path names, etc.)
-5. **Path Traversal**: Sanitize file paths in Trifles (no `..`, absolute paths, etc.)
-6. **Client-side Execution**: Python runs in browser sandbox (Pyodide), no server-side risk
-7. **Rate Limiting**: Consider adding to prevent abuse
-8. **ID Unpredictability**: Random hex IDs prevent enumeration attacks
-9. **Secrets Management**: All secrets from 1Password, never committed to repo
+1. **Local-first = User owns data**: No server can lock them out
+2. **Content hashing**: Ensures integrity, detects corruption
+3. **OAuth only for sync**: Can use app 100% anonymously
+4. **No server-side Python**: All execution in browser sandbox
+5. **CSRF protection**: Still needed for sync endpoints
+6. **Path traversal**: Sanitize file paths in trifles
+7. **Hash collisions**: SHA-256 is collision-resistant enough
 
-## Open Questions / Future Considerations
+## Migration from Current Version
 
-1. Should we add a max Trifle count per account?
-2. Disk space limits per account?
-3. File size limits?
-4. Should adjective-noun list be embedded or configurable?
-5. Session storage: in-memory or SQLite?
-6. How to handle Pyodide version updates?
-7. Admin interface for managing allowlist?
+**No migration needed** - Fresh start!
+- Existing data is local only (on your laptop)
+- You saved important trifles to text files
+- Phase 1 starts with clean slate
+
+## Open Questions
+
+1. **Auto-sync default**: OFF for now, can enable later?
+2. **Storage limits**: 50MB per user? (IndexedDB quota)
+3. **Allowlist**: Still restrict who can create server accounts?
+4. **Display name uniqueness**: Enforce globally or per-email?
+5. **Public trifles**: Allow anonymous users to publish read-only?
 
 ## Notes
 
-- Ace Editor: https://ace.c9.io/ (can load from CDN)
-- Pyodide: https://pyodide.org/ (can load from CDN)
-- Keep UI simple and clean
-- Auto-save eliminates "run unsaved code" issues
-- Prefixed random hex IDs (Stripe/GitHub style) for type safety and security
-- sqlc generates type-safe Go code from SQL, keeping all SQL in one place
-- Generic SQL approach allows future migration from SQLite if needed
+- Ace Editor: https://ace.c9.io/
+- Pyodide: https://pyodide.org/
+- IndexedDB API: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
+- SHA-256 in browser: `crypto.subtle.digest()`
+- Local-first principles: https://www.inkandswitch.com/local-first/
+- Keep it simple: Honest conflict resolution beats clever CRDTs
