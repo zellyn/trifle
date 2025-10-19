@@ -135,3 +135,30 @@ VALUES (?, ?);
 -- name: DeleteAllowlistEntry :exec
 DELETE FROM email_allowlist
 WHERE id = ?;
+
+-- Sessions
+-- name: GetSession :one
+SELECT * FROM sessions
+WHERE id = ? LIMIT 1;
+
+-- name: CreateSession :exec
+INSERT INTO sessions (id, login_id, account_id, email, authenticated, oauth_state, return_url, created_at, last_accessed, expires_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: UpdateSession :exec
+UPDATE sessions
+SET login_id = ?, account_id = ?, email = ?, authenticated = ?, oauth_state = ?, return_url = ?, last_accessed = ?
+WHERE id = ?;
+
+-- name: DeleteSession :exec
+DELETE FROM sessions
+WHERE id = ?;
+
+-- name: DeleteExpiredSessions :exec
+DELETE FROM sessions
+WHERE expires_at < CURRENT_TIMESTAMP;
+
+-- name: UpdateSessionLastAccessed :exec
+UPDATE sessions
+SET last_accessed = ?
+WHERE id = ?;

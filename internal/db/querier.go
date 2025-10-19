@@ -14,10 +14,13 @@ type Querier interface {
 	CreateAccount(ctx context.Context, arg CreateAccountParams) error
 	CreateAccountMember(ctx context.Context, arg CreateAccountMemberParams) error
 	CreateLogin(ctx context.Context, arg CreateLoginParams) error
+	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateTrifle(ctx context.Context, arg CreateTrifleParams) error
 	CreateTrifleFile(ctx context.Context, arg CreateTrifleFileParams) error
 	DeleteAccountMember(ctx context.Context, id string) error
 	DeleteAllowlistEntry(ctx context.Context, id int64) error
+	DeleteExpiredSessions(ctx context.Context) error
+	DeleteSession(ctx context.Context, id string) error
 	DeleteTrifle(ctx context.Context, id string) error
 	DeleteTrifleFile(ctx context.Context, id string) error
 	DeleteTrifleFileByPath(ctx context.Context, arg DeleteTrifleFileByPathParams) error
@@ -30,6 +33,8 @@ type Querier interface {
 	GetLogin(ctx context.Context, id string) (Login, error)
 	GetLoginByEmail(ctx context.Context, email string) (Login, error)
 	GetLoginByGoogleID(ctx context.Context, googleID string) (Login, error)
+	// Sessions
+	GetSession(ctx context.Context, id string) (Session, error)
 	GetTrifle(ctx context.Context, id string) (Trifle, error)
 	GetTrifleFile(ctx context.Context, id string) (TrifleFile, error)
 	GetTrifleFileByPath(ctx context.Context, arg GetTrifleFileByPathParams) (TrifleFile, error)
@@ -38,6 +43,8 @@ type Querier interface {
 	ListTriflesByAccountID(ctx context.Context, accountID string) ([]Trifle, error)
 	UpdateAccountDisplayName(ctx context.Context, arg UpdateAccountDisplayNameParams) error
 	UpdateLogin(ctx context.Context, arg UpdateLoginParams) error
+	UpdateSession(ctx context.Context, arg UpdateSessionParams) error
+	UpdateSessionLastAccessed(ctx context.Context, arg UpdateSessionLastAccessedParams) error
 	UpdateTrifle(ctx context.Context, arg UpdateTrifleParams) error
 	UpdateTrifleFile(ctx context.Context, arg UpdateTrifleFileParams) error
 	UpdateTrifleFileByPath(ctx context.Context, arg UpdateTrifleFileByPathParams) error

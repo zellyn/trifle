@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const addAllowlistEntry = `-- name: AddAllowlistEntry :exec
@@ -102,6 +103,40 @@ func (q *Queries) CreateLogin(ctx context.Context, arg CreateLoginParams) error 
 	return err
 }
 
+const createSession = `-- name: CreateSession :exec
+INSERT INTO sessions (id, login_id, account_id, email, authenticated, oauth_state, return_url, created_at, last_accessed, expires_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateSessionParams struct {
+	ID            string         `json:"id"`
+	LoginID       sql.NullString `json:"login_id"`
+	AccountID     sql.NullString `json:"account_id"`
+	Email         sql.NullString `json:"email"`
+	Authenticated bool           `json:"authenticated"`
+	OauthState    sql.NullString `json:"oauth_state"`
+	ReturnUrl     sql.NullString `json:"return_url"`
+	CreatedAt     time.Time      `json:"created_at"`
+	LastAccessed  time.Time      `json:"last_accessed"`
+	ExpiresAt     time.Time      `json:"expires_at"`
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.ID,
+		arg.LoginID,
+		arg.AccountID,
+		arg.Email,
+		arg.Authenticated,
+		arg.OauthState,
+		arg.ReturnUrl,
+		arg.CreatedAt,
+		arg.LastAccessed,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const createTrifle = `-- name: CreateTrifle :exec
 INSERT INTO trifles (id, account_id, title, description, parent_id)
 VALUES (?, ?, ?, ?, ?)
@@ -165,6 +200,26 @@ WHERE id = ?
 
 func (q *Queries) DeleteAllowlistEntry(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteAllowlistEntry, id)
+	return err
+}
+
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
+DELETE FROM sessions
+WHERE expires_at < CURRENT_TIMESTAMP
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredSessions)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions
+WHERE id = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, id)
 	return err
 }
 
@@ -401,6 +456,30 @@ func (q *Queries) GetLoginByGoogleID(ctx context.Context, googleID string) (Logi
 	return i, err
 }
 
+const getSession = `-- name: GetSession :one
+SELECT id, login_id, account_id, email, authenticated, oauth_state, return_url, created_at, last_accessed, expires_at FROM sessions
+WHERE id = ? LIMIT 1
+`
+
+// Sessions
+func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSession, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.LoginID,
+		&i.AccountID,
+		&i.Email,
+		&i.Authenticated,
+		&i.OauthState,
+		&i.ReturnUrl,
+		&i.CreatedAt,
+		&i.LastAccessed,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getTrifle = `-- name: GetTrifle :one
 SELECT id, account_id, title, description, parent_id, created_at, updated_at FROM trifles
 WHERE id = ? LIMIT 1
@@ -601,6 +680,53 @@ type UpdateLoginParams struct {
 
 func (q *Queries) UpdateLogin(ctx context.Context, arg UpdateLoginParams) error {
 	_, err := q.db.ExecContext(ctx, updateLogin, arg.Email, arg.Name, arg.ID)
+	return err
+}
+
+const updateSession = `-- name: UpdateSession :exec
+UPDATE sessions
+SET login_id = ?, account_id = ?, email = ?, authenticated = ?, oauth_state = ?, return_url = ?, last_accessed = ?
+WHERE id = ?
+`
+
+type UpdateSessionParams struct {
+	LoginID       sql.NullString `json:"login_id"`
+	AccountID     sql.NullString `json:"account_id"`
+	Email         sql.NullString `json:"email"`
+	Authenticated bool           `json:"authenticated"`
+	OauthState    sql.NullString `json:"oauth_state"`
+	ReturnUrl     sql.NullString `json:"return_url"`
+	LastAccessed  time.Time      `json:"last_accessed"`
+	ID            string         `json:"id"`
+}
+
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, updateSession,
+		arg.LoginID,
+		arg.AccountID,
+		arg.Email,
+		arg.Authenticated,
+		arg.OauthState,
+		arg.ReturnUrl,
+		arg.LastAccessed,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSessionLastAccessed = `-- name: UpdateSessionLastAccessed :exec
+UPDATE sessions
+SET last_accessed = ?
+WHERE id = ?
+`
+
+type UpdateSessionLastAccessedParams struct {
+	LastAccessed time.Time `json:"last_accessed"`
+	ID           string    `json:"id"`
+}
+
+func (q *Queries) UpdateSessionLastAccessed(ctx context.Context, arg UpdateSessionLastAccessedParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionLastAccessed, arg.LastAccessed, arg.ID)
 	return err
 }
 

@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trifle - Your Projects</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e1e4e8;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-profile-link {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .user-profile-link:hover {
+            background: #f0f4ff;
+        }
+
+        .logout-btn {
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 6px 12px;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #f6f8fa;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 600;
+            color: #1a1f36;
+        }
+
+        .new-trifle-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .new-trifle-btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .trifles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .trifle-card {
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .trifle-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .trifle-card.editing {
+            cursor: default;
+            pointer-events: none;
+        }
+
+        .trifle-card.editing .description-input {
+            pointer-events: auto;
+        }
+
+        .trifle-card.editing:hover {
+            border-color: #e1e4e8;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .trifle-card-content {
+            pointer-events: none;
+        }
+
+        .delete-trifle-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: auto;
+        }
+
+        .trifle-card:hover .delete-trifle-btn {
+            opacity: 1;
+        }
+
+        .delete-trifle-btn:hover {
+            background: #c0392b;
+        }
+
+        .trifle-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1f36;
+            margin-bottom: 8px;
+        }
+
+        .trifle-description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 12px;
+            line-height: 1.5;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .trifle-description-text {
+            flex: 1;
+        }
+
+        .edit-description-btn {
+            background: transparent;
+            color: #999;
+            border: none;
+            padding: 0;
+            font-size: 14px;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+
+        .trifle-card:hover .edit-description-btn {
+            opacity: 1;
+        }
+
+        .edit-description-btn:hover {
+            color: #667eea;
+        }
+
+        .description-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #667eea;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .trifle-meta {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .empty-state h2 {
+            color: #666;
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state p {
+            color: #999;
+            font-size: 16px;
+            margin-bottom: 24px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .error {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 24px;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #f6f8fa;
+            color: #333;
+            border: 1px solid #d1d5da;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Trifle</h1>
+        <div class="user-info">
+            <a href="/profile" class="user-profile-link">{{.DisplayName}}</a>
+            <a href="/auth/logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header-row">
+            <h2 class="page-title">Your Trifles</h2>
+            <button class="new-trifle-btn" id="newTrifleBtn">+ New Trifle</button>
+        </div>
+
+        <div id="errorMessage"></div>
+        <div id="loadingMessage" class="loading">Loading your trifles...</div>
+        <div id="triflesContainer"></div>
+    </div>
+
+    <!-- New Trifle Modal -->
+    <div id="newTrifleModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">Create New Trifle</h3>
+            <form id="newTrifleForm">
+                <div class="form-group">
+                    <label for="trifleTitle">Title *</label>
+                    <input type="text" id="trifleTitle" required maxlength="200" placeholder="My Python Project">
+                </div>
+                <div class="form-group">
+                    <label for="trifleDescription">Description (optional)</label>
+                    <textarea id="trifleDescription" placeholder="A brief description of what this project does..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Trifle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load trifles from API
+        async function loadTrifles() {
+            try {
+                const response = await fetch('/api/trifles');
+                if (!response.ok) {
+                    throw new Error('Failed to load trifles');
+                }
+                const trifles = await response.json();
+                displayTrifles(trifles);
+            } catch (error) {
+                console.error('Error loading trifles:', error);
+                document.getElementById('errorMessage').innerHTML =
+                    '<div class="error">Failed to load trifles. Please refresh the page.</div>';
+            } finally {
+                document.getElementById('loadingMessage').style.display = 'none';
+            }
+        }
+
+        // Display trifles
+        function displayTrifles(trifles) {
+            const container = document.getElementById('triflesContainer');
+
+            if (!trifles || trifles.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h2>No trifles yet</h2>
+                        <p>Create your first Python project to get started</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'trifles-grid';
+
+            trifles.forEach(trifle => {
+                const card = document.createElement('div');
+                card.className = 'trifle-card';
+                card.onclick = () => window.location.href = `/editor/${trifle.id}`;
+
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-trifle-btn';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteTrifle(trifle);
+                };
+
+                // Content wrapper
+                const content = document.createElement('div');
+                content.className = 'trifle-card-content';
+
+                const title = document.createElement('div');
+                title.className = 'trifle-title';
+                title.textContent = trifle.title;
+
+                const description = document.createElement('div');
+                description.className = 'trifle-description';
+
+                const descriptionText = document.createElement('span');
+                descriptionText.className = 'trifle-description-text';
+                descriptionText.textContent = trifle.description || 'No description';
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-description-btn';
+                editBtn.textContent = '✎';
+                editBtn.title = 'Edit description';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    editDescription(trifle, descriptionText, description, card);
+                };
+
+                description.appendChild(descriptionText);
+                description.appendChild(editBtn);
+
+                const meta = document.createElement('div');
+                meta.className = 'trifle-meta';
+                const updatedDate = new Date(trifle.updated_at).toLocaleDateString();
+                meta.textContent = `Updated ${updatedDate}`;
+
+                content.appendChild(title);
+                content.appendChild(description);
+                content.appendChild(meta);
+
+                card.appendChild(deleteBtn);
+                card.appendChild(content);
+                grid.appendChild(card);
+            });
+
+            container.appendChild(grid);
+        }
+
+        // Delete trifle
+        async function deleteTrifle(trifle) {
+            if (!confirm(`Delete "${trifle.title}"? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/trifles/${trifle.id}`, {
+                    method: 'DELETE',
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete trifle');
+                }
+
+                // Reload the trifles list
+                document.getElementById('triflesContainer').innerHTML = '<div id="loadingMessage">Loading...</div>';
+                await loadTrifles();
+            } catch (error) {
+                console.error('Error deleting trifle:', error);
+                alert('Failed to delete trifle. Please try again.');
+            }
+        }
+
+        // Edit description
+        async function editDescription(trifle, descriptionTextElement, descriptionContainer, card) {
+            const currentDescription = trifle.description || '';
+
+            // Add editing class to disable card hover/click
+            card.classList.add('editing');
+
+            // Disable card onclick
+            const originalOnClick = card.onclick;
+            card.onclick = null;
+
+            // Create textarea
+            const textarea = document.createElement('textarea');
+            textarea.className = 'description-input';
+            textarea.value = currentDescription;
+
+            // Replace description with textarea
+            descriptionContainer.innerHTML = '';
+            descriptionContainer.appendChild(textarea);
+
+            // Handle clicks outside the textarea
+            const handleClickOutside = (e) => {
+                if (!textarea.contains(e.target)) {
+                    saveDescription();
+                }
+            };
+
+            // Add click outside listener after a short delay to avoid immediate triggering
+            setTimeout(() => {
+                document.addEventListener('mousedown', handleClickOutside);
+            }, 100);
+
+            textarea.focus();
+            textarea.select();
+
+            const saveDescription = async () => {
+                const newDescription = textarea.value.trim();
+
+                // Remove editing class and restore onclick
+                card.classList.remove('editing');
+                card.onclick = originalOnClick;
+
+                // Remove click outside listener
+                document.removeEventListener('mousedown', handleClickOutside);
+
+                // Restore original structure
+                const descriptionText = document.createElement('span');
+                descriptionText.className = 'trifle-description-text';
+                descriptionText.textContent = newDescription || 'No description';
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-description-btn';
+                editBtn.textContent = '✎';
+                editBtn.title = 'Edit description';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    editDescription(trifle, descriptionText, descriptionContainer, card);
+                };
+
+                descriptionContainer.innerHTML = '';
+                descriptionContainer.appendChild(descriptionText);
+                descriptionContainer.appendChild(editBtn);
+
+                // If description changed, save to API
+                if (newDescription !== currentDescription) {
+                    try {
+                        const response = await fetch(`/api/trifles/${trifle.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                title: trifle.title,
+                                description: newDescription,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to update description');
+                        }
+
+                        // Update trifle object
+                        trifle.description = newDescription;
+                    } catch (error) {
+                        console.error('Error updating description:', error);
+                        alert('Failed to update description. Please try again.');
+                        // Restore old description on error
+                        descriptionText.textContent = currentDescription || 'No description';
+                    }
+                }
+            };
+
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    saveDescription();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    // Cancel - restore original
+
+                    // Remove editing class and restore onclick
+                    card.classList.remove('editing');
+                    card.onclick = originalOnClick;
+
+                    // Remove click outside listener
+                    document.removeEventListener('mousedown', handleClickOutside);
+
+                    const descriptionText = document.createElement('span');
+                    descriptionText.className = 'trifle-description-text';
+                    descriptionText.textContent = currentDescription || 'No description';
+
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'edit-description-btn';
+                    editBtn.textContent = '✎';
+                    editBtn.title = 'Edit description';
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        editDescription(trifle, descriptionText, descriptionContainer, card);
+                    };
+
+                    descriptionContainer.innerHTML = '';
+                    descriptionContainer.appendChild(descriptionText);
+                    descriptionContainer.appendChild(editBtn);
+                }
+            });
+        }
+
+        // Modal handling
+        const modal = document.getElementById('newTrifleModal');
+        const newTrifleBtn = document.getElementById('newTrifleBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const form = document.getElementById('newTrifleForm');
+
+        newTrifleBtn.addEventListener('click', () => {
+            modal.classList.add('active');
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            modal.classList.remove('active');
+            form.reset();
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+                form.reset();
+            }
+        });
+
+        // Create new trifle
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const title = document.getElementById('trifleTitle').value;
+            const description = document.getElementById('trifleDescription').value;
+
+            try {
+                const response = await fetch('/api/trifles', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ title, description }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to create trifle');
+                }
+
+                const trifle = await response.json();
+
+                // Redirect to editor
+                window.location.href = `/editor/${trifle.id}`;
+            } catch (error) {
+                console.error('Error creating trifle:', error);
+                alert('Failed to create trifle. Please try again.');
+            }
+        });
+
+        // Load trifles on page load
+        loadTrifles();
+    </script>
+</body>
+</html>

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Trifle</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            color: white;
+        }
+
+        .header-content {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-link {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .profile-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 48px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            font-size: 32px;
+            color: #1a1f36;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .profile-section {
+            margin-bottom: 32px;
+        }
+
+        .profile-section h2 {
+            font-size: 18px;
+            color: #1a1f36;
+            margin-bottom: 16px;
+        }
+
+        .profile-info {
+            background: #f7f9fc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .info-value {
+            color: #1a1f36;
+            font-weight: 600;
+        }
+
+        .username-display {
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        .suggestion-container {
+            margin-top: 16px;
+        }
+
+        .suggestions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0;
+            margin-bottom: 16px;
+        }
+
+        .suggestion-btn {
+            background: #f7f9fc;
+            border: 2px solid #e1e4e8;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            color: #1a1f36;
+            font-weight: 500;
+        }
+
+        .suggestion-btn:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .suggestion-btn.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f7f9fc;
+            color: #1a1f36;
+        }
+
+        .btn-secondary:hover {
+            background: #e1e4e8;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <a href="/" class="back-link">← Back to Home</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="profile-card">
+            <h1>Profile</h1>
+
+            <div id="message" class="message"></div>
+
+            <div class="profile-info">
+                <div class="info-row">
+                    <span class="info-label">Email</span>
+                    <span class="info-value" id="userEmail">Loading...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Username</span>
+                    <span class="info-value username-display" id="userName">Loading...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Account Created</span>
+                    <span class="info-value" id="accountCreated">Loading...</span>
+                </div>
+            </div>
+
+            <div class="profile-section">
+                <h2>Change Username</h2>
+                <p style="color: #666; margin-bottom: 16px;">Pick a new username from these suggestions:</p>
+
+                <div id="suggestionsContainer" class="suggestion-container" style="display: none;">
+                    <div id="suggestions" class="suggestions"></div>
+                    <div class="action-buttons">
+                        <button id="refreshBtn" class="btn btn-secondary">🔄 More Suggestions</button>
+                        <button id="saveBtn" class="btn btn-primary" disabled>Save Username</button>
+                    </div>
+                </div>
+
+                <button id="changeUsernameBtn" class="btn btn-primary" style="width: 100%;">
+                    Change Username
+                </button>
+            </div>
+
+            <div class="profile-section">
+                <button id="logoutBtn" class="btn btn-danger" style="width: 100%;">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedSuggestion = null;
+
+        // Profile data from backend
+        const profileData = {
+            email: "{{.Email}}",
+            displayName: "{{.DisplayName}}",
+            createdAt: "{{.CreatedAt}}"
+        };
+
+        // Load profile data
+        async function loadProfile() {
+            document.getElementById('userEmail').textContent = profileData.email;
+            document.getElementById('userName').textContent = profileData.displayName;
+            document.getElementById('accountCreated').textContent = new Date(profileData.createdAt).toLocaleDateString();
+        }
+
+        // Show change username interface
+        document.getElementById('changeUsernameBtn').addEventListener('click', async () => {
+            document.getElementById('changeUsernameBtn').style.display = 'none';
+            document.getElementById('suggestionsContainer').style.display = 'block';
+            await loadSuggestions();
+        });
+
+        // Load username suggestions
+        async function loadSuggestions() {
+            try {
+                const response = await fetch('/api/account/name-suggestions');
+                if (!response.ok) throw new Error('Failed to load suggestions');
+
+                const data = await response.json();
+                displaySuggestions(data.suggestions);
+            } catch (error) {
+                console.error('Error loading suggestions:', error);
+                showMessage('Failed to load suggestions', 'error');
+            }
+        }
+
+        // Display suggestions
+        function displaySuggestions(suggestions) {
+            const container = document.getElementById('suggestions');
+            container.innerHTML = '';
+
+            suggestions.forEach(suggestion => {
+                const btn = document.createElement('button');
+                btn.className = 'suggestion-btn';
+                btn.textContent = suggestion.name;
+                btn.onclick = () => selectSuggestion(suggestion.name);
+                container.appendChild(btn);
+            });
+        }
+
+        // Select a suggestion
+        function selectSuggestion(suggestion) {
+            selectedSuggestion = suggestion;
+
+            // Update UI
+            document.querySelectorAll('.suggestion-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.textContent === suggestion);
+            });
+
+            document.getElementById('saveBtn').disabled = false;
+        }
+
+        // Refresh suggestions
+        document.getElementById('refreshBtn').addEventListener('click', loadSuggestions);
+
+        // Save username
+        document.getElementById('saveBtn').addEventListener('click', async () => {
+            if (!selectedSuggestion) return;
+
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/account/name', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: selectedSuggestion }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to update username');
+                }
+
+                const result = await response.json();
+                showMessage('Username updated successfully!', 'success');
+
+                // Update display
+                document.getElementById('userName').textContent = result.display_name;
+
+                // Hide change interface
+                document.getElementById('suggestionsContainer').style.display = 'none';
+                document.getElementById('changeUsernameBtn').style.display = 'block';
+                selectedSuggestion = null;
+            } catch (error) {
+                console.error('Error saving username:', error);
+                showMessage(error.message, 'error');
+                saveBtn.disabled = false;
+            }
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            window.location.href = '/auth/logout';
+        });
+
+        // Show message
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type}`;
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    message.className = 'message';
+                }, 3000);
+            }
+        }
+
+        // Load profile on page load
+        loadProfile();
+    </script>
+</body>
+</html>

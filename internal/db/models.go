@@ -39,6 +39,19 @@ type Login struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type Session struct {
+	ID            string         `json:"id"`
+	LoginID       sql.NullString `json:"login_id"`
+	AccountID     sql.NullString `json:"account_id"`
+	Email         sql.NullString `json:"email"`
+	Authenticated bool           `json:"authenticated"`
+	OauthState    sql.NullString `json:"oauth_state"`
+	ReturnUrl     sql.NullString `json:"return_url"`
+	CreatedAt     time.Time      `json:"created_at"`
+	LastAccessed  time.Time      `json:"last_accessed"`
+	ExpiresAt     time.Time      `json:"expires_at"`
+}
+
 type Trifle struct {
 	ID          string         `json:"id"`
 	AccountID   string         `json:"account_id"`

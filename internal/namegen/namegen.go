@@ -8,7 +8,7 @@ import (
 
 // Lists of adjectives and nouns for generating display names
 // Adjectives have a Victorian/19th century literary flavor
-var adjectives = []string{
+var Adjectives = []string{
 	"dapper", "jolly", "keen", "clever", "bold", "wise", "gallant", "stalwart",
 	"intrepid", "valiant", "earnest", "sprightly", "hale", "robust", "jaunty", "plucky",
 	"bonny", "dashing", "stout", "resolute", "steadfast", "vigilant", "mirthful", "sanguine",
@@ -19,7 +19,7 @@ var adjectives = []string{
 	"hearty", "merry", "noble", "bright", "brisk", "capable", "worthy", "able",
 }
 
-var nouns = []string{
+var Nouns = []string{
 	"panda", "tiger", "eagle", "dolphin", "falcon", "turtle", "penguin", "raccoon",
 	"otter", "badger", "raven", "lynx", "beaver", "coyote", "gecko", "hamster",
 	"iguana", "jaguar", "koala", "lemur", "monkey", "narwhal", "owl", "parrot",
@@ -32,12 +32,12 @@ var nouns = []string{
 
 // Generate creates a random adjective-noun combination
 func Generate() (string, error) {
-	adj, err := randomChoice(adjectives)
+	adj, err := randomChoice(Adjectives)
 	if err != nil {
 		return "", err
 	}
 
-	noun, err := randomChoice(nouns)
+	noun, err := randomChoice(Nouns)
 	if err != nil {
 		return "", err
 	}

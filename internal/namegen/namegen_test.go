@@ -24,7 +24,7 @@ func TestGenerate(t *testing.T) {
 		// Check that adjective is in our list
 		adj := parts[0]
 		found := false
-		for _, a := range adjectives {
+		for _, a := range Adjectives {
 			if a == adj {
 				found = true
 				break
@@ -37,7 +37,7 @@ func TestGenerate(t *testing.T) {
 		// Check that noun is in our list
 		noun := parts[1]
 		found = false
-		for _, n := range nouns {
+		for _, n := range Nouns {
 			if n == noun {
 				found = true
 				break

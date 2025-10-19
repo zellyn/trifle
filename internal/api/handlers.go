@@ -2,46 +2,19 @@ package api
 
 import (
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
 
 	"github.com/zellyn/trifle/internal/auth"
+	"github.com/zellyn/trifle/internal/db"
 )
 
-var homeTemplate = template.Must(template.New("home").Parse(`<!DOCTYPE html>
-<html>
-<head>
-    <title>Trifle - Your Projects</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-        h1 { color: #667eea; }
-        .user-info {
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        a { color: #667eea; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <div class="user-info">
-        Welcome, <strong>{{.Email}}</strong>!
-        <a href="/auth/logout" style="float: right;">Logout</a>
-    </div>
-    <h1>Your Trifles</h1>
-    <p>Coming soon: Your Python projects will appear here!</p>
-</body>
-</html>`))
+// Templates holds the embedded template files
+var Templates fs.FS
 
 // HandleHome shows logged-in homepage, or redirects to /signup if not authenticated
-func HandleHome(sessionMgr *auth.SessionManager) http.HandlerFunc {
+func HandleHome(sessionMgr *auth.SessionManager, dbManager *db.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if user is logged in
 		session, err := sessionMgr.GetSession(r)
@@ -51,12 +24,101 @@ func HandleHome(sessionMgr *auth.SessionManager) http.HandlerFunc {
 			return
 		}
 
+		// Get account details
+		account, err := dbManager.GetAccount(r.Context(), session.AccountID)
+		if err != nil {
+			slog.Error("Failed to get account", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Load and parse the home template
+		tmpl, err := template.ParseFS(Templates, "home.html")
+		if err != nil {
+			slog.Error("Failed to parse home template", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Prepare data for template
+		data := struct {
+			Email       string
+			DisplayName string
+		}{
+			Email:       session.Email,
+			DisplayName: account.DisplayName,
+		}
+
 		// User is logged in, show homepage
-		// TODO: Render actual homepage with trifles
-		// For now, just show a placeholder
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := homeTemplate.Execute(w, session); err != nil {
+		if err := tmpl.Execute(w, data); err != nil {
 			slog.Error("Failed to render home page", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
+// HandleSignup shows the signup/login page
+func HandleSignup() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Load and parse the signup template
+		tmpl, err := template.ParseFS(Templates, "signup.html")
+		if err != nil {
+			slog.Error("Failed to parse signup template", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Render the signup page
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := tmpl.Execute(w, nil); err != nil {
+			slog.Error("Failed to render signup page", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
+// HandleProfile shows the user profile page
+func HandleProfile(sessionMgr *auth.SessionManager, dbManager *db.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get session (authentication handled by middleware)
+		session, err := sessionMgr.GetSession(r)
+		if err != nil || !session.Authenticated {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		// Get account details
+		account, err := dbManager.GetAccount(r.Context(), session.AccountID)
+		if err != nil {
+			slog.Error("Failed to get account", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Load and parse the profile template
+		tmpl, err := template.ParseFS(Templates, "profile.html")
+		if err != nil {
+			slog.Error("Failed to parse profile template", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Prepare data for template
+		data := struct {
+			Email       string
+			DisplayName string
+			CreatedAt   string
+		}{
+			Email:       session.Email,
+			DisplayName: account.DisplayName,
+			CreatedAt:   account.CreatedAt.Format("2006-01-02"),
+		}
+
+		// Render the profile page
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := tmpl.Execute(w, data); err != nil {
+			slog.Error("Failed to render profile page", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 	}

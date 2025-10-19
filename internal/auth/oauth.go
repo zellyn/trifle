@@ -175,15 +175,24 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	session.Authenticated = true
 	session.OAuthState = "" // Clear the state token
 
+	// Check for return URL before we save (we'll clear it)
+	returnURL := session.ReturnURL
+	if returnURL != "" {
+		session.ReturnURL = "" // Clear it after use
+	}
+
 	if err := oc.SessionMgr.Save(w, session); err != nil {
 		slog.Error("Failed to save session", "error", err)
 		http.Error(w, "Failed to save session", http.StatusInternalServerError)
 		return
 	}
 
-	// Redirect to logged-in home page
-	// TODO: For now redirect to /, but we'll make the landing page show different content when logged in
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	// Redirect to return URL if set, otherwise home page
+	if returnURL != "" {
+		http.Redirect(w, r, returnURL, http.StatusSeeOther)
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
 }
 
 // getUserInfo fetches user information from Google

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/zellyn/trifle/internal/auth"
 )
 
 // responseWriter wraps http.ResponseWriter to capture the status code
@@ -49,4 +52,39 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			"remote_addr", r.RemoteAddr,
 		)
 	})
+}
+
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// ContextKeySession is the context key for storing the session
+	ContextKeySession contextKey = "session"
+)
+
+// RequireAuthAPI is middleware that requires authentication for API routes
+// Returns JSON error responses instead of redirecting
+func RequireAuthAPI(sessionMgr *auth.SessionManager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			session, err := sessionMgr.GetSession(r)
+			if err != nil || !session.Authenticated {
+				JSONUnauthorized(w, "Authentication required")
+				return
+			}
+
+			// Add session to request context for downstream handlers
+			ctx := context.WithValue(r.Context(), ContextKeySession, session)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// GetSessionFromContext retrieves the session from the request context
+func GetSessionFromContext(r *http.Request) *auth.Session {
+	session, ok := r.Context().Value(ContextKeySession).(*auth.Session)
+	if !ok {
+		return nil
+	}
+	return session
 }

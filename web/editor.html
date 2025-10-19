@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Trifle Editor</title>
+
+    <!-- Ace Editor from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/mode-python.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/theme-monokai.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .back-link {
+            color: #3498db;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .trifle-title {
+            font-size: 16px;
+            color: #ecf0f1;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            user-select: none;
+        }
+
+        .trifle-title:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .trifle-title-input {
+            font-size: 16px;
+            color: #ecf0f1;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #3498db;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-profile-link {
+            color: #3498db;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .user-profile-link:hover {
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .run-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .run-btn:hover {
+            background: #229954;
+        }
+
+        .run-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        /* Main editor layout */
+        .editor-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* File tree */
+        .file-tree {
+            width: 250px;
+            background: #34495e;
+            color: #ecf0f1;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .file-tree-header {
+            padding: 12px;
+            background: #2c3e50;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .add-file-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .add-file-btn:hover {
+            background: #2980b9;
+        }
+
+        .file-list {
+            list-style: none;
+        }
+
+        .file-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .file-item:hover {
+            background: #2c3e50;
+        }
+
+        .file-item.active {
+            background: #3498db;
+        }
+
+        .file-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .delete-file-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            opacity: 0;
+        }
+
+        .file-item:hover .delete-file-btn {
+            opacity: 1;
+        }
+
+        /* Editor and console */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #editor {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .resize-handle {
+            height: 6px;
+            background: #2c3e50;
+            cursor: ns-resize;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .resize-handle:hover {
+            background: #3498db;
+        }
+
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 2px;
+            background: #7f8c8d;
+            border-radius: 1px;
+        }
+
+        .console-container {
+            height: 250px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            display: flex;
+            flex-direction: column;
+            min-height: 100px;
+            max-height: calc(100vh - 200px);
+        }
+
+        .console-header {
+            background: #2d2d2d;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .clear-console-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .console-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* Terminal styles */
+        .terminal-output {
+            flex: 1;
+        }
+
+        .terminal-line {
+            margin-bottom: 2px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .terminal-error {
+            color: #f48771;
+        }
+
+        .terminal-info {
+            color: #6a9fb5;
+        }
+
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .terminal-prompt {
+            color: #d4d4d4;
+            white-space: pre;
+        }
+
+        .terminal-input {
+            background: transparent;
+            border: none;
+            color: #4ec9b0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            outline: none;
+            flex: 1;
+        }
+
+        .terminal-input-echo {
+            color: #4ec9b0;
+        }
+
+        .run-btn.stop {
+            background: #e74c3c;
+        }
+
+        .run-btn.stop:hover {
+            background: #c0392b;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 32px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* New file modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 6px;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #ecf0f1;
+            color: #333;
+        }
+
+        .saving-indicator {
+            font-size: 12px;
+            color: #95a5a6;
+        }
+
+        .saving-indicator.saving {
+            color: #f39c12;
+        }
+
+        .saving-indicator.saved {
+            color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div id="loadingMessage">Loading Pyodide...</div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <a href="/" class="back-link">← Back</a>
+            <h1 class="trifle-title" id="trifleTitle">Loading...</h1>
+        </div>
+        <div class="header-right">
+            <a href="/profile" class="user-profile-link">{{.DisplayName}}</a>
+            <span id="savingIndicator" class="saving-indicator"></span>
+            <button id="runBtn" class="run-btn" disabled>Run</button>
+        </div>
+    </div>
+
+    <!-- Main editor -->
+    <div class="editor-container">
+        <!-- File tree -->
+        <div class="file-tree">
+            <div class="file-tree-header">
+                <span>Files</span>
+                <button id="addFileBtn" class="add-file-btn">+ New</button>
+            </div>
+            <ul id="fileList" class="file-list"></ul>
+        </div>
+
+        <!-- Editor and console -->
+        <div class="editor-area">
+            <div id="editor"></div>
+            <div id="resizeHandle" class="resize-handle"></div>
+            <div id="consoleContainer" class="console-container">
+                <div class="console-header">
+                    <span>Output</span>
+                    <button id="clearConsoleBtn" class="clear-console-btn">Clear</button>
+                </div>
+                <div id="terminal" class="console-output"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New file modal -->
+    <div id="newFileModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">New File</h3>
+            <form id="newFileForm">
+                <div class="form-group">
+                    <label for="fileName">File path</label>
+                    <input type="text" id="fileName" required placeholder="example.py or utils/helper.py">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelFileBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/terminal.js"></script>
+    <script src="/js/editor.js"></script>
+</body>
+</html>

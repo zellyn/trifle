@@ -244,6 +244,18 @@ func (m *Manager) GetAccountByDisplayName(ctx context.Context, displayName strin
 	return result.(*Account), nil
 }
 
+// UpdateAccountDisplayName updates an account's display name
+func (m *Manager) UpdateAccountDisplayName(ctx context.Context, accountID, displayName string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.UpdateAccountDisplayName(ctx, UpdateAccountDisplayNameParams{
+			DisplayName: displayName,
+			ID:          accountID,
+		})
+		return nil, err
+	})
+	return err
+}
+
 // ListTriflesByAccountID lists all trifles for an account
 func (m *Manager) ListTriflesByAccountID(ctx context.Context, accountID string) ([]Trifle, error) {
 	result, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
@@ -323,6 +335,40 @@ func (m *Manager) UpdateTrifleFileByPath(ctx context.Context, trifleID, path, co
 	return err
 }
 
+// UpdateTrifle updates a trifle's title and description
+func (m *Manager) UpdateTrifle(ctx context.Context, id, title, description string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.UpdateTrifle(ctx, UpdateTrifleParams{
+			Title:       title,
+			Description: sql.NullString{String: description, Valid: description != ""},
+			ID:          id,
+		})
+		return nil, err
+	})
+	return err
+}
+
+// DeleteTrifle deletes a trifle and all its files (via CASCADE)
+func (m *Manager) DeleteTrifle(ctx context.Context, id string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.DeleteTrifle(ctx, id)
+		return nil, err
+	})
+	return err
+}
+
+// DeleteTrifleFileByPath deletes a file by its path
+func (m *Manager) DeleteTrifleFileByPath(ctx context.Context, trifleID, path string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.DeleteTrifleFileByPath(ctx, DeleteTrifleFileByPathParams{
+			TrifleID: trifleID,
+			Path:     path,
+		})
+		return nil, err
+	})
+	return err
+}
+
 // Transaction executes multiple operations in a transaction
 func (m *Manager) Transaction(ctx context.Context, fn func(*sql.Tx, *Queries) error) error {
 	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
@@ -346,6 +392,67 @@ func (m *Manager) Transaction(ctx context.Context, fn func(*sql.Tx, *Queries) er
 		}
 
 		return nil, nil
+	})
+	return err
+}
+
+// Session methods
+
+// GetSession retrieves a session by ID
+func (m *Manager) GetSession(ctx context.Context, id string) (Session, error) {
+	result, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		return q.GetSession(ctx, id)
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	return result.(Session), nil
+}
+
+// CreateSession creates a new session
+func (m *Manager) CreateSession(ctx context.Context, params CreateSessionParams) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.CreateSession(ctx, params)
+		return nil, err
+	})
+	return err
+}
+
+// UpdateSession updates an existing session
+func (m *Manager) UpdateSession(ctx context.Context, params UpdateSessionParams) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.UpdateSession(ctx, params)
+		return nil, err
+	})
+	return err
+}
+
+// DeleteSession deletes a session
+func (m *Manager) DeleteSession(ctx context.Context, id string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.DeleteSession(ctx, id)
+		return nil, err
+	})
+	return err
+}
+
+// DeleteExpiredSessions deletes all expired sessions
+func (m *Manager) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.DeleteExpiredSessions(ctx)
+		return nil, err
+	})
+	return err
+}
+
+// UpdateSessionLastAccessed updates the last accessed time for a session
+func (m *Manager) UpdateSessionLastAccessed(ctx context.Context, lastAccessed time.Time, id string) error {
+	_, err := m.execute(ctx, func(db *sql.DB, q *Queries) (interface{}, error) {
+		err := q.UpdateSessionLastAccessed(ctx, UpdateSessionLastAccessedParams{
+			LastAccessed: lastAccessed,
+			ID:           id,
+		})
+		return nil, err
 	})
 	return err
 }
