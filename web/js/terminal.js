@@ -2,11 +2,12 @@
 // Handles stdout/stderr display, ANSI colors, and terminal-style input
 
 class Terminal {
-    constructor(containerElement) {
+    constructor(containerElement, onWrite = null) {
         this.container = containerElement;
         this.outputBuffer = [];
         this.inputResolver = null;
         this.isWaitingForInput = false;
+        this.onWrite = onWrite; // Callback when something is written
 
         // Persistent ANSI state across lines
         this.currentStyles = [];
@@ -80,6 +81,11 @@ class Terminal {
     // Write output to terminal
     write(text, type = 'output') {
         if (!text) return;
+
+        // Notify callback that console is being used
+        if (this.onWrite) {
+            this.onWrite();
+        }
 
         if (type === 'output') {
             // Process as continuous stream with ANSI codes

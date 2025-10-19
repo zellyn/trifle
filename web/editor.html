@@ -132,7 +132,9 @@
 
         /* File tree */
         .file-tree {
-            width: 250px;
+            width: 200px;
+            min-width: 150px;
+            max-width: 500px;
             background: #34495e;
             color: #ecf0f1;
             overflow-y: auto;
@@ -242,7 +244,31 @@
             border-radius: 1px;
         }
 
-        .console-container {
+        .vertical-resize-handle {
+            width: 6px;
+            background: #2c3e50;
+            cursor: ew-resize;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .vertical-resize-handle:hover {
+            background: #3498db;
+        }
+
+        .vertical-resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background: #7f8c8d;
+            border-radius: 1px;
+        }
+
+        .output-container {
             height: 250px;
             background: #1e1e1e;
             color: #d4d4d4;
@@ -252,7 +278,7 @@
             max-height: calc(100vh - 200px);
         }
 
-        .console-header {
+        .output-header {
             background: #2d2d2d;
             padding: 8px 12px;
             font-size: 12px;
@@ -262,7 +288,12 @@
             align-items: center;
         }
 
-        .clear-console-btn {
+        .output-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .output-btn {
             background: #e74c3c;
             color: white;
             border: none;
@@ -272,6 +303,28 @@
             cursor: pointer;
         }
 
+        .output-btn:hover {
+            opacity: 0.9;
+        }
+
+        #popoutCanvasBtn {
+            background: #3498db;
+        }
+
+        .output-content {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+
+        /* Console pane */
+        .console-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
         .console-output {
             flex: 1;
             overflow-y: auto;
@@ -279,6 +332,37 @@
             font-family: 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.5;
+        }
+
+        /* Canvas pane */
+        .canvas-pane {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e1e1e;
+            min-width: 0;
+            padding: 12px;
+        }
+
+        #outputCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            background: white;
+            border: 1px solid #444;
+        }
+
+        /* Layout states */
+        .output-content.console-only .canvas-pane {
+            display: none;
+        }
+
+        .output-content.canvas-only .console-pane {
+            display: none;
+        }
+
+        .output-content.split .console-pane {
+            border-right: 1px solid #444;
         }
 
         /* Terminal styles */
@@ -474,8 +558,8 @@
             <h1 class="trifle-title" id="trifleTitle">Loading...</h1>
         </div>
         <div class="header-right">
-            <a href="/profile" class="user-profile-link">{{.DisplayName}}</a>
             <span id="savingIndicator" class="saving-indicator"></span>
+            <a href="/profile" class="user-profile-link">{{.DisplayName}}</a>
             <button id="runBtn" class="run-btn" disabled>Run</button>
         </div>
     </div>
@@ -483,7 +567,7 @@
     <!-- Main editor -->
     <div class="editor-container">
         <!-- File tree -->
-        <div class="file-tree">
+        <div class="file-tree" id="fileTree">
             <div class="file-tree-header">
                 <span>Files</span>
                 <button id="addFileBtn" class="add-file-btn">+ New</button>
@@ -491,16 +575,29 @@
             <ul id="fileList" class="file-list"></ul>
         </div>
 
+        <!-- Vertical resize handle -->
+        <div id="verticalResizeHandle" class="vertical-resize-handle"></div>
+
         <!-- Editor and console -->
         <div class="editor-area">
             <div id="editor"></div>
             <div id="resizeHandle" class="resize-handle"></div>
-            <div id="consoleContainer" class="console-container">
-                <div class="console-header">
+            <div id="outputContainer" class="output-container">
+                <div class="output-header">
                     <span>Output</span>
-                    <button id="clearConsoleBtn" class="clear-console-btn">Clear</button>
+                    <div class="output-buttons">
+                        <button id="popoutCanvasBtn" class="output-btn" style="display: none;">Pop-out Canvas</button>
+                        <button id="clearOutputBtn" class="output-btn">Clear</button>
+                    </div>
                 </div>
-                <div id="terminal" class="console-output"></div>
+                <div id="outputContent" class="output-content">
+                    <div id="consolePane" class="console-pane">
+                        <div id="terminal" class="console-output"></div>
+                    </div>
+                    <div id="canvasPane" class="canvas-pane" style="display: none;">
+                        <canvas id="outputCanvas"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

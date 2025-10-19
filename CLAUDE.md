@@ -61,6 +61,10 @@ Supported codes: 30-37 (foreground), 40-47 (background), 49 (bg default), 0 (res
 - **Cmd+Enter** (Mac) / **Ctrl+Enter** (Windows/Linux) - Run code
 - Auto-save after 1 second of typing inactivity
 
+## Workflow
+
+**Before committing**: Always use Task tool to launch a code review agent to check for issues.
+
 ## Critical: SQLite Dependency
 `modernc.org/sqlite` and `modernc.org/libc` versions **must match exactly** (see go.mod comment). Test enforces this: `go test ./internal/db`. Never upgrade one without the other.
 
