@@ -1,6 +1,9 @@
 // Trifle Worker - Runs Python code in Web Worker to avoid blocking UI
 // Communicates with main thread via JSON message protocol
 
+// Constants
+const OUTPUT_BATCH_SIZE = 1000;  // Batch output every 1000 characters for performance
+
 let pyodide = null;
 let isRunning = false;
 
@@ -82,7 +85,7 @@ class WorkerConsole:
     def __init__(self, stream_type):
         self.stream_type = stream_type
         self.buffer = []
-        self.batch_size = 1000  # Send after this many characters
+        self.batch_size = ${OUTPUT_BATCH_SIZE}  # Send after this many characters
         self.current_length = 0
 
     def write(self, text):
@@ -240,25 +243,34 @@ canvas = Canvas()
 
 // Load files into Pyodide filesystem
 async function handleLoadFiles({ files }) {
-    for (const file of files) {
-        // Create parent directories if needed
-        const parts = file.path.split('/');
-        let currentPath = '';
+    try {
+        for (const file of files) {
+            // Create parent directories if needed
+            const parts = file.path.split('/');
+            let currentPath = '';
 
-        for (let i = 0; i < parts.length - 1; i++) {
-            currentPath += (i > 0 ? '/' : '') + parts[i];
+            for (let i = 0; i < parts.length - 1; i++) {
+                currentPath += (i > 0 ? '/' : '') + parts[i];
+                try {
+                    pyodide.FS.mkdir(currentPath);
+                } catch (e) {
+                    // Directory already exists, ignore
+                }
+            }
+
+            // Write file
             try {
-                pyodide.FS.mkdir(currentPath);
+                pyodide.FS.writeFile(file.path, file.content);
             } catch (e) {
-                // Directory already exists, ignore
+                send('error', { message: `Failed to write file ${file.path}: ${e.message}` });
+                return;
             }
         }
 
-        // Write file
-        pyodide.FS.writeFile(file.path, file.content);
+        send('files-loaded');
+    } catch (error) {
+        send('error', { message: `Failed to load files: ${error.message}` });
     }
-
-    send('files-loaded');
 }
 
 // Run Python code

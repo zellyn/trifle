@@ -1,6 +1,12 @@
 // Trifle Editor - Main JavaScript
 // Handles file tree, Ace editor, Pyodide integration, and auto-save
 
+// Constants
+const SYNC_CHECK_INTERVAL_MS = 10000;  // Check for offline sync every 10 seconds
+const SAVE_DEBOUNCE_MS = 1000;         // Debounce auto-save by 1 second
+const RETRY_SYNC_DELAY_MS = 500;       // Delay before retrying sync operations
+const POPOUT_CHECK_INTERVAL_MS = 500;  // Check if popout window closed
+
 // Global state
 const state = {
     trifleId: null,
@@ -18,9 +24,13 @@ const state = {
     canvasCtx: null,
     popoutCanvas: null,
     popoutWindow: null,
+    popoutWindowChecker: null, // Interval for checking if popout is closed
     unsyncedFiles: new Set(),  // Track files that haven't been saved to server
     syncCheckInterval: null,   // Interval for checking if we can sync
     isOffline: false,          // Track offline status
+    syncInProgress: false,     // Prevent overlapping sync operations
+    canvasUsed: false,         // Track if canvas has been used for output
+    consoleUsed: false,        // Track if console has been used for output
 };
 
 // Extract trifle ID from URL
@@ -31,9 +41,6 @@ function getTrifleId() {
 }
 
 // Canvas management
-let canvasUsed = false;
-let consoleUsed = false;
-
 function updateOutputLayout() {
     const outputContent = document.getElementById('outputContent');
     const canvasPane = document.getElementById('canvasPane');
@@ -42,12 +49,12 @@ function updateOutputLayout() {
     // Remove all layout classes
     outputContent.classList.remove('console-only', 'canvas-only', 'split');
 
-    if (canvasUsed && consoleUsed) {
+    if (state.canvasUsed && state.consoleUsed) {
         // Both used: show split view
         outputContent.classList.add('split');
         canvasPane.style.display = 'flex';
         popoutBtn.style.display = 'inline-block';
-    } else if (canvasUsed) {
+    } else if (state.canvasUsed) {
         // Only canvas: show canvas only
         outputContent.classList.add('canvas-only');
         canvasPane.style.display = 'flex';
@@ -61,13 +68,13 @@ function updateOutputLayout() {
 }
 
 function markCanvasUsed() {
-    canvasUsed = true;
+    state.canvasUsed = true;
     updateOutputLayout();
 }
 
 function markConsoleUsed() {
-    if (!consoleUsed) {
-        consoleUsed = true;
+    if (!state.consoleUsed) {
+        state.consoleUsed = true;
         updateOutputLayout();
     }
 }
@@ -82,8 +89,8 @@ function clearOutput() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Reset usage flags
-    canvasUsed = false;
-    consoleUsed = false;
+    state.canvasUsed = false;
+    state.consoleUsed = false;
     updateOutputLayout();
 }
 
@@ -153,6 +160,11 @@ function popoutCanvas() {
                     const containerWidth = container.clientWidth;
                     const containerHeight = container.clientHeight;
 
+                    // Prevent division by zero
+                    if (canvas.height === 0 || containerHeight === 0 || containerWidth === 0) {
+                        return; // Skip update if dimensions are invalid
+                    }
+
                     // Get canvas aspect ratio
                     const canvasAspect = canvas.width / canvas.height;
                     const containerAspect = containerWidth / containerHeight;
@@ -195,14 +207,20 @@ function popoutCanvas() {
     state.popoutCanvas = popoutCanvas;
     state.popoutWindow = popoutWindow;
 
+    // Clear any existing window checker to prevent memory leak
+    if (state.popoutWindowChecker) {
+        clearInterval(state.popoutWindowChecker);
+    }
+
     // Listen for window close
-    const checkClosed = setInterval(() => {
+    state.popoutWindowChecker = setInterval(() => {
         if (popoutWindow.closed) {
             state.popoutCanvas = null;
             state.popoutWindow = null;
-            clearInterval(checkClosed);
+            clearInterval(state.popoutWindowChecker);
+            state.popoutWindowChecker = null;
         }
-    }, 500);
+    }, POPOUT_CHECK_INTERVAL_MS);
 }
 
 // Initialize everything
@@ -501,7 +519,7 @@ async function saveCurrentFile() {
 
         // Server is online - try to sync any unsynced files
         if (state.unsyncedFiles.size > 0) {
-            setTimeout(() => retrySyncUnsyncedFiles(), 500);
+            setTimeout(() => retrySyncUnsyncedFiles(), RETRY_SYNC_DELAY_MS);
         }
     } catch (error) {
         // Offline is an expected state, don't spam console with errors
@@ -536,7 +554,7 @@ function debouncedSave() {
 
     state.saveTimeout = setTimeout(() => {
         saveCurrentFile();
-    }, 1000);
+    }, SAVE_DEBOUNCE_MS);
 }
 
 // Update saving indicator
@@ -572,7 +590,7 @@ function execOnBothCanvases(operation) {
 }
 
 // Handle messages from worker
-function handleWorkerMessage(e) {
+async function handleWorkerMessage(e) {
     const { type, ...data } = e.data;
 
     switch (type) {
@@ -683,7 +701,7 @@ function handleWorkerMessage(e) {
 
         case 'files-changed':
             // Sync files from worker back to database
-            syncFilesFromWorker(data.files);
+            await syncFilesFromWorker(data.files);
             break;
 
         case 'complete':
@@ -705,12 +723,14 @@ function handleWorkerMessage(e) {
 // Handle input request from worker
 async function handleInputRequest(prompt) {
     const result = await state.terminal.requestInput(prompt);
+    // result will be null if input was cancelled (user clicked Stop)
 
-    // Send response back to worker
+    // Send response back to worker (if it still exists)
+    // Note: Worker may have been terminated while waiting for input
     if (state.worker) {
         state.worker.postMessage({
             type: 'input-response',
-            value: result
+            value: result  // null signals cancellation, raises KeyboardInterrupt in Python
         });
     }
 }
@@ -784,7 +804,13 @@ async function runCode() {
 
     // Make sure current file is saved
     if (state.isDirty) {
-        await saveCurrentFile();
+        try {
+            await saveCurrentFile();
+        } catch (error) {
+            // saveCurrentFile normally doesn't throw, but handle just in case
+            console.error('Error saving file before run:', error);
+            // Continue anyway - user wants to run the code
+        }
     }
 
     // Update button to Stop
@@ -794,8 +820,8 @@ async function runCode() {
     runBtn.classList.add('stop');
 
     // Reset output states
-    canvasUsed = false;
-    consoleUsed = false;
+    state.canvasUsed = false;
+    state.consoleUsed = false;
 
     state.terminal.clear();
     state.terminal.write('>>> Running main.py...', 'info');
@@ -964,7 +990,7 @@ async function syncFilesFromWorker(workerFiles) {
             // If we successfully synced at least one file, try to sync any other unsynced files
             if (anySucceeded && state.unsyncedFiles.size > 0) {
                 console.log('Server is back online - retrying unsynced files...');
-                setTimeout(() => retrySyncUnsyncedFiles(), 1000);
+                setTimeout(() => retrySyncUnsyncedFiles(), RETRY_SYNC_DELAY_MS);
             }
         }
     } catch (error) {
@@ -980,14 +1006,25 @@ function startSyncCheck() {
 
     console.log('Starting periodic sync check (every 10 seconds)...');
     state.syncCheckInterval = setInterval(async () => {
+        // Skip if sync already in progress
+        if (state.syncInProgress) {
+            console.log('Sync already in progress, skipping this interval');
+            return;
+        }
+
         if (state.unsyncedFiles.size > 0) {
             console.log('Checking if server is back online...');
-            await retrySyncUnsyncedFiles();
+            state.syncInProgress = true;
+            try {
+                await retrySyncUnsyncedFiles();
+            } finally {
+                state.syncInProgress = false;
+            }
         } else {
             // All synced, stop checking
             stopSyncCheck();
         }
-    }, 10000);  // Check every 10 seconds
+    }, SYNC_CHECK_INTERVAL_MS);
 }
 
 // Stop periodic sync check
@@ -1061,8 +1098,11 @@ async function retrySyncUnsyncedFiles() {
             }
         }
 
-        // Remember current file before reload
+        // Remember current file and editor state before reload
         const currentFilePath = state.currentFile ? state.currentFile.path : null;
+        const cursorPosition = state.editor ? state.editor.getCursorPosition() : null;
+        const scrollTop = state.editor ? state.editor.session.getScrollTop() : null;
+        const editorContent = state.editor ? state.editor.getValue() : null;
 
         // Reload to get updated file list with IDs
         try {
@@ -1073,6 +1113,19 @@ async function retrySyncUnsyncedFiles() {
                 const fileToReopen = state.files.find(f => f.path === currentFilePath);
                 if (fileToReopen && fileToReopen !== state.currentFile) {
                     openFile(fileToReopen);
+
+                    // Restore editor state
+                    if (editorContent !== null && state.editor.getValue() !== editorContent) {
+                        // User had unsaved changes, restore them
+                        state.editor.setValue(editorContent, -1);
+                    }
+                    if (cursorPosition) {
+                        state.editor.moveCursorToPosition(cursorPosition);
+                        state.editor.clearSelection();
+                    }
+                    if (scrollTop !== null) {
+                        state.editor.session.setScrollTop(scrollTop);
+                    }
                 }
             }
         } catch (error) {
@@ -1094,6 +1147,9 @@ function stopExecution() {
     if (!state.isRunning) return;
 
     // Terminate the worker (forcefully stop Python execution)
+    // Note: This may interrupt file syncing if Python is in the middle of
+    // writing files, but that's acceptable since the user explicitly stopped execution.
+    // Any files already written to the worker's filesystem will be lost.
     if (state.worker) {
         state.worker.terminate();
         state.worker = null;
@@ -1102,6 +1158,10 @@ function stopExecution() {
 
     // Cancel any pending input
     state.terminal.cancelInput();
+
+    // Clear any pending sync operations
+    // (syncInProgress flag will be reset when worker restarts)
+    state.syncInProgress = false;
 
     // Reset UI
     finishExecution();
