@@ -1,17 +1,19 @@
 # Trifle - Project Context for Claude
 
 ## What This Is
-Browser-based Python3 playground using Pyodide (WASM). All code execution happens client-side in the browser. Google OAuth with email allowlist controls access.
+Local-first browser-based Python3 playground using Pyodide (WASM). All code execution happens client-side. Optional Google OAuth for syncing data to server.
 
 ## Current Status
-**Completed:** Phases 1-3 (Foundation, Auth, Backend API)
-- Database, migrations, ID generation, name generator
-- Google OAuth flow, allowlist, sessions, auto-account creation
-- Full REST API for trifles and files (CRUD, batch updates)
-- Account name suggestion & validation system
-- HTML templates (signup, home with trifle list, editor structure)
-
-**In Progress:** Phases 4-6 - Frontend (editor JS, Pyodide integration)
+**Completed:**
+- ✅ IndexedDB storage layer (client-side)
+- ✅ Service worker for offline support
+- ✅ Pyodide integration with web worker execution
+- ✅ Multi-file editor with auto-save
+- ✅ ANSI terminal output support
+- ✅ `input()` support for interactive programs
+- ✅ Google OAuth authentication (optional, for sync)
+- ✅ Bidirectional sync with file-based KV store
+- ✅ Profile management with random name generation
 
 **Run locally:**
 ```bash
@@ -21,21 +23,26 @@ go run main.go  # → http://localhost:3000
 ```
 
 **Key decisions:**
-- Session cleanup on login (not background goroutine)
-- Context cancellation in DB
+- **Local-first**: All data in browser IndexedDB, no account required
+- **Optional sync**: Google OAuth only needed for backup/restore
+- **Pure KV store**: Server never parses user data, just stores opaque bytes
+- **Content-addressed storage**: Files stored by SHA-256 hash for deduplication
+- **Logical clocks**: Conflict resolution for bidirectional sync
 - **SameSite=Lax** (not Strict) for OAuth callback compatibility
-- Trifle IDs=16 hex chars
-- Templates loaded from embedded FS (not inline)
+- **Production detection**: Inferred from OAUTH_REDIRECT_URL scheme (https = secure cookies)
 - Client-side execution = **works offline** (after initial load)
-- Graceful offline handling (shows "Offline" instead of error popups)
+- Graceful offline handling (service worker shows "Offline" page)
 
 ## Module Organization
-- `internal/db/` - SQLite schema, sqlc queries, single-goroutine manager pattern, ID generation
-- `internal/auth/` - Google OAuth, sessions, allowlist checking
-- `internal/api/` - HTTP handlers, endpoints, middleware (auth, CSRF)
-- `internal/namegen/` - Adjective-noun account name generator
+- `internal/auth/` - Google OAuth, sessions (email-based, no DB)
+- `internal/kv/` - File-based key-value store for sync
 - `web/` - Static frontend (Ace editor, Pyodide, vanilla JS)
-  - `editor.js` - File tree, auto-save, Pyodide execution, `input()` support, ANSI color parsing
+  - `js/app.js` - Main app controller, trifle list, modals
+  - `js/db.js` - IndexedDB storage layer with content addressing
+  - `js/editor.js` - File tree, auto-save, Pyodide execution, `input()` support, ANSI color parsing
+  - `js/sync-kv.js` - Bidirectional sync manager
+  - `js/namegen.js` - Client-side random name generator
+  - `sw.js` - Service worker for offline support
 
 ## Python Features
 
@@ -61,12 +68,31 @@ Supported codes: 30-37 (foreground), 40-47 (background), 49 (bg default), 0 (res
 - **Cmd+Enter** (Mac) / **Ctrl+Enter** (Windows/Linux) - Run code
 - Auto-save after 1 second of typing inactivity
 
+## Modal UX
+
+New Trifle modal:
+- Auto-focuses title field
+- **Cmd/Ctrl+Enter** to submit
+- **Esc** to cancel
+
 ## Workflow
 
 **Before committing**: Always use Task tool to launch a code review agent to check for issues.
 
-## Critical: SQLite Dependency
-`modernc.org/sqlite` and `modernc.org/libc` versions **must match exactly** (see go.mod comment). Test enforces this: `go test ./internal/db`. Never upgrade one without the other.
+## KV Sync Schema
+
+Server stores user data in flat files:
+```
+data/
+├── user/{email}/profile                              # User profile JSON
+├── user/{email}/trifle/latest/{trifle_id}/{version}  # Latest version pointer (empty file)
+├── user/{email}/trifle/version/{version}             # Version metadata with file refs
+└── file/{hash[0:2]}/{hash[2:4]}/{hash}               # Content-addressed files (global)
+```
+
+- Email-based access control (user can only access their own data)
+- `file/*` is global (content-addressed, anyone can read/write)
+- Version ID = `version_{hash[0:16]}`
 
 ---
 

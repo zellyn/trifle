@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,16 +33,23 @@ func main() {
 		port = "3000"
 	}
 
-	// Determine if we're in production (HTTPS) or development (HTTP)
-	isProduction := os.Getenv("PRODUCTION") == "true"
+	// Get OAuth redirect URL (used to determine if we're in production)
+	redirectURL := os.Getenv("OAUTH_REDIRECT_URL")
+	if redirectURL == "" {
+		// Default to localhost if not specified
+		redirectURL = fmt.Sprintf("http://localhost:%s/auth/callback", port)
+	}
+
+	// Determine if we're in production based on redirect URL scheme
+	isProduction := strings.HasPrefix(redirectURL, "https://")
 
 	// Data directory for flat-file storage
 	dataDir := "./data"
 
 	// Initialize KV store
-	kvStore, err := kv.NewStore(dataDir)
-	if err != nil {
-		slog.Error("Failed to initialize KV store", "error", err)
+	kvStore, err2 := kv.NewStore(dataDir)
+	if err2 != nil {
+		slog.Error("Failed to initialize KV store", "error", err2)
 		os.Exit(1)
 	}
 
@@ -51,26 +59,19 @@ func main() {
 	sessionMgr := auth.NewSessionManager(isProduction)
 
 	// Get OAuth credentials
-	clientID, clientSecret, err := auth.GetOAuthCredentials()
-	if err != nil {
-		slog.Error("Failed to get OAuth credentials", "error", err)
+	clientID, clientSecret, err3 := auth.GetOAuthCredentials()
+	if err3 != nil {
+		slog.Error("Failed to get OAuth credentials", "error", err3)
 		os.Exit(1)
-	}
-
-	// Determine redirect URL based on environment
-	redirectURL := os.Getenv("OAUTH_REDIRECT_URL")
-	if redirectURL == "" {
-		// Default to localhost if not specified
-		redirectURL = fmt.Sprintf("http://localhost:%s/auth/callback", port)
 	}
 
 	// Initialize OAuth config
 	oauthConfig := auth.NewOAuthConfig(clientID, clientSecret, redirectURL, sessionMgr)
 
 	// Set up web filesystem
-	webContent, err := fs.Sub(webFS, "web")
-	if err != nil {
-		slog.Error("Failed to get web subdirectory", "error", err)
+	webContent, err4 := fs.Sub(webFS, "web")
+	if err4 != nil {
+		slog.Error("Failed to get web subdirectory", "error", err4)
 		os.Exit(1)
 	}
 
@@ -120,7 +121,7 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		slog.Info("Trifle server starting", "url", fmt.Sprintf("http://localhost:%s", port))
+		slog.Info("Trifle server starting", "port", port, "oauth_redirect", redirectURL)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Server failed", "error", err)
 			os.Exit(1)
