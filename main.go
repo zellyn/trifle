@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,9 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zellyn/trifle/internal/api"
 	"github.com/zellyn/trifle/internal/auth"
-	"github.com/zellyn/trifle/internal/db"
+	"github.com/zellyn/trifle/internal/kv"
 )
 
 //go:embed web
@@ -37,27 +35,20 @@ func main() {
 	// Determine if we're in production (HTTPS) or development (HTTP)
 	isProduction := os.Getenv("PRODUCTION") == "true"
 
-	// Database path
-	dbPath := "./data/trifle.db"
+	// Data directory for flat-file storage
+	dataDir := "./data"
 
-	// Ensure data directory exists
-	if err := os.MkdirAll("./data", 0755); err != nil {
-		slog.Error("Failed to create data directory", "error", err)
-		os.Exit(1)
-	}
-
-	// Initialize database manager
-	dbManager, err := db.NewManager(dbPath)
+	// Initialize KV store
+	kvStore, err := kv.NewStore(dataDir)
 	if err != nil {
-		slog.Error("Failed to initialize database", "error", err)
+		slog.Error("Failed to initialize KV store", "error", err)
 		os.Exit(1)
 	}
-	defer dbManager.Close()
 
-	slog.Info("Database initialized successfully")
+	slog.Info("Storage initialized successfully", "dataDir", dataDir)
 
-	// Initialize session manager
-	sessionMgr := auth.NewSessionManager(isProduction, dbManager)
+	// Initialize session manager (for OAuth)
+	sessionMgr := auth.NewSessionManager(isProduction)
 
 	// Get OAuth credentials
 	clientID, clientSecret, err := auth.GetOAuthCredentials()
@@ -74,150 +65,54 @@ func main() {
 	}
 
 	// Initialize OAuth config
-	oauthConfig := auth.NewOAuthConfig(clientID, clientSecret, redirectURL, dbManager, sessionMgr)
+	oauthConfig := auth.NewOAuthConfig(clientID, clientSecret, redirectURL, sessionMgr)
 
-	// Set up template filesystem for API handlers
+	// Set up web filesystem
 	webContent, err := fs.Sub(webFS, "web")
 	if err != nil {
 		slog.Error("Failed to get web subdirectory", "error", err)
 		os.Exit(1)
 	}
-	api.Templates = webContent
 
 	// Set up HTTP router
 	mux := http.NewServeMux()
 
-	// Home page (auth-aware)
-	mux.HandleFunc("/", api.HandleHome(sessionMgr, dbManager))
+	// Home page - NO AUTH REQUIRED (local-first!)
+	// Serves the static index.html which uses IndexedDB
+	mux.Handle("/", http.FileServer(http.FS(webContent)))
 
-	// Auth routes
+	// Auth routes (optional, only for sync)
 	mux.HandleFunc("/auth/login", oauthConfig.HandleLogin)
 	mux.HandleFunc("/auth/callback", oauthConfig.HandleCallback)
 	mux.HandleFunc("/auth/logout", oauthConfig.HandleLogout)
+	mux.HandleFunc("/api/whoami", auth.HandleWhoAmI(sessionMgr))
 
-	// API handlers
-	trifleHandlers := api.NewTrifleHandlers(dbManager)
-	accountHandlers := api.NewAccountHandlers(dbManager)
+	// KV API handlers (require authentication)
+	kvHandlers := kv.NewHandlers(kvStore)
 
-	// API routes (all require authentication)
-	requireAuthAPI := api.RequireAuthAPI(sessionMgr)
-
-	// Account endpoints
-	mux.Handle("/api/account/name-suggestions", requireAuthAPI(http.HandlerFunc(accountHandlers.HandleGetNameSuggestions)))
-	mux.Handle("/api/account/name", requireAuthAPI(http.HandlerFunc(accountHandlers.HandleSetAccountName)))
-
-	// Trifle endpoints
-	mux.Handle("/api/trifles", requireAuthAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			trifleHandlers.HandleListTrifles(w, r)
-		} else if r.Method == http.MethodPost {
-			trifleHandlers.HandleCreateTrifle(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})))
-
-	// Trifle by ID endpoints (GET, PUT, DELETE)
-	mux.Handle("/api/trifles/", requireAuthAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if it's a file operation
-		if len(r.URL.Path) > len("/api/trifles/") {
-			// Extract the path after /api/trifles/
-			path := r.URL.Path[len("/api/trifles/"):]
-
-			// Check if this is a files endpoint
-			if len(path) > 0 {
-				// Split on / to get trifle_id and potential "files" segment
-				// Example paths:
-				// - /api/trifles/trifle_abc123 -> trifle operations
-				// - /api/trifles/trifle_abc123/files -> file operations
-
-				// Simple check: does it contain "/files"?
-				if len(path) > 6 && path[len(path)-6:] == "/files" {
-					// File list or batch update: /api/trifles/:id/files
-					if r.Method == http.MethodGet {
-						trifleHandlers.HandleListFiles(w, r)
-					} else if r.Method == http.MethodPost {
-						trifleHandlers.HandleCreateFile(w, r)
-					} else if r.Method == http.MethodPut {
-						trifleHandlers.HandleBatchUpdateFiles(w, r)
-					} else if r.Method == http.MethodDelete {
-						trifleHandlers.HandleDeleteFile(w, r)
-					} else {
-						http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-					}
-					return
-				}
-			}
-		}
-
-		// Trifle-level operations
-		if r.Method == http.MethodGet {
-			trifleHandlers.HandleGetTrifle(w, r)
-		} else if r.Method == http.MethodPut {
-			trifleHandlers.HandleUpdateTrifle(w, r)
-		} else if r.Method == http.MethodDelete {
-			trifleHandlers.HandleDeleteTrifle(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})))
-
-	// Signup page
-	mux.HandleFunc("/signup", api.HandleSignup())
-
-	// Profile page (requires authentication)
-	mux.Handle("/profile", sessionMgr.RequireAuth(api.HandleProfile(sessionMgr, dbManager)))
-
-	// Editor page (requires authentication)
-	mux.Handle("/editor/", sessionMgr.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get session
+	// Create session adapter for KV middleware
+	kvSessionAdapter := kv.NewSessionManagerAdapter(func(r *http.Request) (string, bool, error) {
 		session, err := sessionMgr.GetSession(r)
 		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+			return "", false, err
 		}
+		return session.Email, session.Authenticated, nil
+	})
 
-		// Get account details
-		account, err := dbManager.GetAccount(r.Context(), session.AccountID)
-		if err != nil {
-			slog.Error("Failed to get account", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
+	requireAuth := kv.RequireAuth(kvSessionAdapter)
 
-		// Serve the editor template
-		tmpl, err := template.ParseFS(webContent, "editor.html")
-		if err != nil {
-			slog.Error("Failed to parse editor template", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		// Prepare data for template
-		data := struct {
-			DisplayName string
-		}{
-			DisplayName: account.DisplayName,
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := tmpl.Execute(w, data); err != nil {
-			slog.Error("Failed to render editor page", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-	})))
+	// KV endpoints
+	mux.HandleFunc("/kv/", requireAuth(kvHandlers.HandleKV))
+	mux.HandleFunc("/kvlist/", requireAuth(kvHandlers.HandleList))
 
 	// Serve static files from embedded web directory
-	fileServer := http.FileServer(http.FS(webContent))
-
-	// Other static files
-	mux.Handle("/css/", fileServer)
-	mux.Handle("/js/", fileServer)
+	mux.Handle("/css/", http.FileServer(http.FS(webContent)))
+	mux.Handle("/js/", http.FileServer(http.FS(webContent)))
 
 	// Create HTTP server with logging middleware
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", port),
-		Handler:      api.LoggingMiddleware(mux),
+		Handler:      loggingMiddleware(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -248,4 +143,18 @@ func main() {
 	}
 
 	slog.Info("Server stopped")
+}
+
+// loggingMiddleware logs HTTP requests
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		duration := time.Since(start)
+		slog.Info("HTTP request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"duration", duration,
+		)
+	})
 }

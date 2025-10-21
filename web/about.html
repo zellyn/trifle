@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - Trifling</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px 50px;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        h1 a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        h1 a:visited {
+            color: #667eea;
+        }
+
+        h1 a:hover {
+            color: #667eea;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .description {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 40px;
+            text-align: left;
+        }
+
+        .home-button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 14px 28px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .home-button:hover {
+            background: #5568d3;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .features {
+            margin-top: 50px;
+            text-align: left;
+        }
+
+        .features h3 {
+            font-size: 18px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .features ul {
+            list-style: none;
+        }
+
+        .features li {
+            padding: 8px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .features li:before {
+            content: "✓ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .footer {
+            margin-top: 40px;
+            font-size: 12px;
+            color: #999;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .section h2 {
+            font-size: 20px;
+            color: #667eea;
+            margin-bottom: 12px;
+        }
+
+        .section p {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><a href="/">Trifling</a></h1>
+        <div class="subtitle">About This Project</div>
+
+        <div class="section">
+            <h2>What is Trifling?</h2>
+            <p>
+                Trifling is where you write Python code and watch it run—right in your browser!
+                No downloads, no setup, no complicated installations. Just open it and start coding.
+            </p>
+        </div>
+
+        <div class="section">
+            <h2>Your Code, Your Computer</h2>
+            <p>
+                Everything you create stays on your computer. Your Trifles (that's what we call your projects!)
+                are saved in your browser, so they work even when you're offline. They're private and they're yours.
+            </p>
+        </div>
+
+        <div class="features">
+            <h3>What Can You Do?</h3>
+            <ul>
+                <li>Write games, calculators, and fun programs</li>
+                <li>Code anywhere—even on a plane with no WiFi</li>
+                <li>Make mistakes safely and learn by doing</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 50px;">
+            <a href="/" class="home-button">Back to Home</a>
+        </div>
+
+        <div class="footer">
+            Built for learning, experimentation, and fun
+        </div>
+    </div>
+    <script>
+        // Register service worker for offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered:', registration);
+                    })
+                    .catch((error) => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>

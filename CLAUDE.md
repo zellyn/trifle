@@ -15,7 +15,7 @@ Browser-based Python3 playground using Pyodide (WASM). All code execution happen
 
 **Run locally:**
 ```bash
-export GOOGLE_CLIENT_ID="957488163855-57odpu7dd2e9f9m44teermhuti95s43r.apps.googleusercontent.com"
+export GOOGLE_CLIENT_ID="$(op read 'op://Shared/Trifle/Google OAuth Client ID')"
 export GOOGLE_CLIENT_SECRET="$(op read 'op://Shared/Trifle/Google OAuth Client Secret')"
 go run main.go  # → http://localhost:3000
 ```

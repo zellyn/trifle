@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="pageTitle">Trifle Editor</title>
+    <title id="pageTitle">Trifling Editor</title>
 
     <!-- Ace Editor from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
@@ -47,14 +47,19 @@
             font-weight: 600;
         }
 
-        .back-link {
-            color: #3498db;
+        .logo-link {
+            color: #667eea;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 18px;
+            font-weight: 600;
         }
 
-        .back-link:hover {
-            text-decoration: underline;
+        .logo-link:hover {
+            opacity: 0.8;
+        }
+
+        .logo-link:visited {
+            color: #667eea;
         }
 
         .trifle-title {
@@ -554,12 +559,12 @@
     <!-- Header -->
     <div class="header">
         <div class="header-left">
-            <a href="/" class="back-link">← Back</a>
+            <a href="/" class="logo-link">Trifling</a>
             <h1 class="trifle-title" id="trifleTitle">Loading...</h1>
         </div>
         <div class="header-right">
             <span id="savingIndicator" class="saving-indicator"></span>
-            <a href="/profile" class="user-profile-link">{{.DisplayName}}</a>
+            <a href="/" class="user-profile-link" id="userDisplayName">Loading...</a>
             <button id="runBtn" class="run-btn" disabled>Run</button>
         </div>
     </div>
@@ -620,6 +625,20 @@
     </div>
 
     <script src="/js/terminal.js"></script>
-    <script src="/js/editor.js"></script>
+    <script type="module" src="/js/editor.js"></script>
+    <script>
+        // Register service worker for offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered:', registration);
+                    })
+                    .catch((error) => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>

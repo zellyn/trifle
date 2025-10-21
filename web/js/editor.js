@@ -1,6 +1,8 @@
 // Trifle Editor - Main JavaScript
 // Handles file tree, Ace editor, Pyodide integration, and auto-save
 
+import { TrifleDB } from './db.js';
+
 // Constants
 const SYNC_CHECK_INTERVAL_MS = 10000;  // Check for offline sync every 10 seconds
 const SAVE_DEBOUNCE_MS = 1000;         // Debounce auto-save by 1 second
@@ -25,19 +27,14 @@ const state = {
     popoutCanvas: null,
     popoutWindow: null,
     popoutWindowChecker: null, // Interval for checking if popout is closed
-    unsyncedFiles: new Set(),  // Track files that haven't been saved to server
-    syncCheckInterval: null,   // Interval for checking if we can sync
-    isOffline: false,          // Track offline status
-    syncInProgress: false,     // Prevent overlapping sync operations
     canvasUsed: false,         // Track if canvas has been used for output
     consoleUsed: false,        // Track if console has been used for output
 };
 
-// Extract trifle ID from URL
+// Extract trifle ID from query string (?id=trifle_xyz)
 function getTrifleId() {
-    const path = window.location.pathname;
-    const match = path.match(/\/editor\/([^/]+)/);
-    return match ? match[1] : null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('id');
 }
 
 // Canvas management
@@ -233,6 +230,16 @@ async function init() {
         return;
     }
 
+    // Load and display current user
+    const currentUser = await TrifleDB.getCurrentUser();
+    if (currentUser) {
+        const userData = await TrifleDB.getUserData(currentUser.id);
+        const displayNameEl = document.getElementById('userDisplayName');
+        if (displayNameEl && userData) {
+            displayNameEl.textContent = userData.display_name;
+        }
+    }
+
     // Initialize Terminal
     const terminalElement = document.getElementById('terminal');
     state.terminal = new Terminal(terminalElement, markConsoleUsed);
@@ -283,21 +290,38 @@ function initEditor() {
     });
 }
 
-// Load trifle and files from API
+// Load trifle and files from IndexedDB
 async function loadTrifle() {
     try {
-        const response = await fetch(`/api/trifles/${state.trifleId}`);
-        if (!response.ok) {
-            throw new Error('Failed to load trifle');
+        // Get trifle pointer
+        const trifle = await TrifleDB.getTrifle(state.trifleId);
+        if (!trifle) {
+            throw new Error('Trifle not found');
         }
 
-        const data = await response.json();
-        state.trifle = data;
-        state.files = data.files || [];
+        // Get trifle data blob
+        const trifleData = await TrifleDB.getTrifleData(state.trifleId);
+        if (!trifleData) {
+            throw new Error('Trifle data not found');
+        }
+
+        // Load file contents for each file
+        const files = [];
+        for (const file of trifleData.files) {
+            const content = await TrifleDB.getContent(file.hash);
+            files.push({
+                path: file.path,
+                hash: file.hash,
+                content: content || ''
+            });
+        }
+
+        state.trifle = { ...trifle, ...trifleData };
+        state.files = files;
 
         // Update UI
-        document.getElementById('trifleTitle').textContent = data.title;
-        document.getElementById('pageTitle').textContent = `${data.title} - Trifle`;
+        document.getElementById('trifleTitle').textContent = trifleData.name;
+        document.getElementById('pageTitle').textContent = `${trifleData.name} - Trifling`;
 
         // Render file tree
         renderFileTree();
@@ -319,12 +343,12 @@ async function loadTrifle() {
         const loadingMessage = document.getElementById('loadingMessage');
         loadingMessage.innerHTML = `
             <div style="color: #e74c3c; text-align: center;">
-                <div style="font-size: 18px; margin-bottom: 12px;">⚠️ Cannot connect to server</div>
+                <div style="font-size: 18px; margin-bottom: 12px;">⚠️ Cannot load trifle</div>
                 <div style="font-size: 14px; color: #95a5a6;">
-                    Make sure the Trifle server is running.<br>
+                    Trifle not found or database error.<br>
                     Check the console for details.
                 </div>
-                <button onclick="location.reload()" style="
+                <button onclick="location.href='/'" style="
                     margin-top: 20px;
                     padding: 10px 20px;
                     background: #3498db;
@@ -333,7 +357,7 @@ async function loadTrifle() {
                     border-radius: 4px;
                     cursor: pointer;
                     font-size: 14px;
-                ">Retry</button>
+                ">← Back to Home</button>
             </div>
         `;
         // Keep loading overlay visible with error message
@@ -358,15 +382,7 @@ function renderFileTree() {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'file-name';
         nameSpan.textContent = file.path;
-
-        // Show indicator if file is unsynced
-        if (state.unsyncedFiles.has(file.path)) {
-            nameSpan.textContent += ' ⚠';
-            nameSpan.title = file.path + ' (not saved to server - offline)';
-            nameSpan.style.color = '#f39c12';
-        } else {
-            nameSpan.title = file.path;
-        }
+        nameSpan.title = file.path;
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-file-btn';
@@ -405,20 +421,20 @@ function openFile(file) {
 // Create a new file
 async function createFile(path, content = '') {
     try {
-        const response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ path, content }),
-        });
+        // Store file content
+        const hash = await TrifleDB.storeContent(content, 'file');
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to create file');
-        }
+        // Get current trifle data
+        const trifleData = await TrifleDB.getTrifleData(state.trifleId);
 
-        const newFile = await response.json();
+        // Add file to trifle
+        trifleData.files.push({ path, hash });
+
+        // Update trifle
+        await TrifleDB.updateTrifle(state.trifleId, trifleData);
+
+        // Add to local state
+        const newFile = { path, hash, content };
         state.files.push(newFile);
         renderFileTree();
         openFile(newFile);
@@ -435,14 +451,14 @@ async function deleteFile(file) {
     }
 
     try {
-        const response = await fetch(
-            `/api/trifles/${state.trifleId}/files?path=${encodeURIComponent(file.path)}`,
-            { method: 'DELETE' }
-        );
+        // Get current trifle data
+        const trifleData = await TrifleDB.getTrifleData(state.trifleId);
 
-        if (!response.ok) {
-            throw new Error('Failed to delete file');
-        }
+        // Remove file from trifle
+        trifleData.files = trifleData.files.filter(f => f.path !== file.path);
+
+        // Update trifle
+        await TrifleDB.updateTrifle(state.trifleId, trifleData);
 
         // Remove from state
         state.files = state.files.filter(f => f.path !== file.path);
@@ -464,7 +480,7 @@ async function deleteFile(file) {
     }
 }
 
-// Save current file
+// Save current file to IndexedDB
 async function saveCurrentFile() {
     if (!state.currentFile || !state.isDirty) {
         return;
@@ -476,69 +492,37 @@ async function saveCurrentFile() {
     updateSavingIndicator('saving');
 
     try {
-        // Use batch update endpoint
-        const response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                files: [{
-                    path: state.currentFile.path,
-                    content: content,
-                }],
-            }),
-        });
+        // Store new file content
+        const newHash = await TrifleDB.storeContent(content, 'file');
 
-        if (!response.ok) {
-            throw new Error('Failed to save file');
+        // Get current trifle data
+        const trifleData = await TrifleDB.getTrifleData(state.trifleId);
+
+        // Update file hash in trifle
+        const fileIndex = trifleData.files.findIndex(f => f.path === state.currentFile.path);
+        if (fileIndex >= 0) {
+            trifleData.files[fileIndex].hash = newHash;
         }
 
+        // Update trifle
+        await TrifleDB.updateTrifle(state.trifleId, trifleData);
+
+        // Update local state
+        state.currentFile.hash = newHash;
         state.isDirty = false;
-
-        // We're back online!
-        if (state.isOffline) {
-            state.isOffline = false;
-        }
-
-        // Remove from unsynced files if it was there
-        if (state.unsyncedFiles.has(state.currentFile.path)) {
-            state.unsyncedFiles.delete(state.currentFile.path);
-            // Update file tree to remove warning icon
-            renderFileTree();
-        }
 
         updateSavingIndicator('saved');
 
         // Clear "saved" indicator after 2 seconds
         setTimeout(() => {
-            if (!state.isDirty && !state.isOffline) {
+            if (!state.isDirty) {
                 updateSavingIndicator('');
             }
         }, 2000);
-
-        // Server is online - try to sync any unsynced files
-        if (state.unsyncedFiles.size > 0) {
-            setTimeout(() => retrySyncUnsyncedFiles(), RETRY_SYNC_DELAY_MS);
-        }
     } catch (error) {
-        // Offline is an expected state, don't spam console with errors
-        // Show offline indicator instead of popup
-        if (!state.isOffline) {
-            state.isOffline = true;
-            updateSavingIndicator('offline');
-        }
-
-        // Mark file as unsynced
-        state.unsyncedFiles.add(state.currentFile.path);
-
-        // Update file tree to show warning icon
-        renderFileTree();
-
-        // Start periodic sync check
-        startSyncCheck();
-
-        // Offline indicator stays until we're back online
+        console.error('Error saving file:', error);
+        updateSavingIndicator('error');
+        alert('Failed to save file');
     }
 }
 
@@ -843,303 +827,77 @@ async function runCode() {
     });
 }
 
-// Sync files from worker back to database
+// Sync files from worker back to IndexedDB
 async function syncFilesFromWorker(workerFiles) {
     try {
         // Build a map of current trifle files
         const currentFiles = new Map(state.files.map(f => [f.path, f.content]));
 
-        // Track files to create or update
-        const filesToSync = [];
+        // Get current trifle data
+        const trifleData = await TrifleDB.getTrifleData(state.trifleId);
+        let hasChanges = false;
 
+        // Process each file from worker
         for (const pyFile of workerFiles) {
             const currentContent = currentFiles.get(pyFile.path);
 
             // Only sync if file is new or content changed
             if (currentContent === undefined || currentContent !== pyFile.content) {
-                filesToSync.push(pyFile);
+                // Store file content
+                const hash = await TrifleDB.storeContent(pyFile.content, 'file');
+
+                // Update or add file in trifle data
+                const fileIndex = trifleData.files.findIndex(f => f.path === pyFile.path);
+                if (fileIndex >= 0) {
+                    // Update existing file
+                    trifleData.files[fileIndex].hash = hash;
+                } else {
+                    // Add new file
+                    trifleData.files.push({ path: pyFile.path, hash });
+                }
+
+                // Update local state
+                const localIndex = state.files.findIndex(f => f.path === pyFile.path);
+                if (localIndex >= 0) {
+                    state.files[localIndex].content = pyFile.content;
+                    state.files[localIndex].hash = hash;
+                } else {
+                    state.files.push({
+                        path: pyFile.path,
+                        content: pyFile.content,
+                        hash
+                    });
+                }
+
+                hasChanges = true;
             }
         }
 
-        // Sync files to database
-        if (filesToSync.length > 0) {
-            // Separate new files from updates
-            const newFiles = [];
-            const updatedFiles = [];
-
-            for (const file of filesToSync) {
-                if (currentFiles.has(file.path)) {
-                    updatedFiles.push(file);
-                } else {
-                    newFiles.push(file);
-                }
-            }
-
-            let anySucceeded = false;
-            const syncedPaths = [];
-
-            // Create new files
-            for (const file of newFiles) {
-                try {
-                    const response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ path: file.path, content: file.content }),
-                    });
-
-                    if (!response.ok) {
-                        // Server error - this is unexpected, log it
-                        console.warn(`Failed to create file ${file.path}: ${response.status}`);
-                        state.unsyncedFiles.add(file.path);
-                    } else {
-                        anySucceeded = true;
-                        syncedPaths.push(file.path);
-                        state.unsyncedFiles.delete(file.path);
-                    }
-                } catch (error) {
-                    // Network failure (offline) - expected, don't log
-                    state.unsyncedFiles.add(file.path);
-                    if (!state.isOffline) {
-                        state.isOffline = true;
-                        updateSavingIndicator('offline');
-                    }
-                }
-            }
-
-            // Batch update existing files
-            if (updatedFiles.length > 0) {
-                try {
-                    const response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            files: updatedFiles,
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        // Server error - this is unexpected, log it
-                        console.warn(`Failed to batch update files: ${response.status}`);
-                        updatedFiles.forEach(f => state.unsyncedFiles.add(f.path));
-                    } else {
-                        anySucceeded = true;
-                        updatedFiles.forEach(f => {
-                            syncedPaths.push(f.path);
-                            state.unsyncedFiles.delete(f.path);
-                        });
-                    }
-                } catch (error) {
-                    // Network failure (offline) - expected, don't log
-                    updatedFiles.forEach(f => state.unsyncedFiles.add(f.path));
-                    if (!state.isOffline) {
-                        state.isOffline = true;
-                        updateSavingIndicator('offline');
-                    }
-                }
-            }
-
-            // Update local state and UI with new/changed files (even if server sync failed)
-            for (const file of filesToSync) {
-                const existingIndex = state.files.findIndex(f => f.path === file.path);
-                if (existingIndex >= 0) {
-                    // Update existing file
-                    state.files[existingIndex].content = file.content;
-                } else {
-                    // Add new file
-                    state.files.push({
-                        id: null,  // Will get real ID when server is back
-                        path: file.path,
-                        content: file.content
-                    });
-                }
-            }
-
-            // Re-render file tree to show new files
+        // Save trifle if there were changes
+        if (hasChanges) {
+            await TrifleDB.updateTrifle(state.trifleId, trifleData);
+            // Re-render file tree to show new/updated files
             renderFileTree();
-
-            // Try to reload from server if we successfully synced
-            if (anySucceeded) {
-                // We're back online!
-                if (state.isOffline) {
-                    state.isOffline = false;
-                    if (state.unsyncedFiles.size === 0) {
-                        updateSavingIndicator('');  // Clear offline indicator
-                    }
-                }
-
-                try {
-                    await loadTrifle();
-                } catch (error) {
-                    // loadTrifle failed (probably offline), but that's okay - we have local state updated
-                    // Don't log - this is expected when offline
-                }
-            } else if (filesToSync.length > 0) {
-                // We updated local state but couldn't persist to server
-                const unsyncedCount = state.unsyncedFiles.size;
-                console.warn(`${unsyncedCount} file(s) not saved to server - will retry when online`);
-                state.terminal.write(`⚠️  ${unsyncedCount} file(s) saved locally but not to server (offline)`, 'info');
-
-                // Start periodic sync check if not already running
-                startSyncCheck();
-            }
-
-            // If we successfully synced at least one file, try to sync any other unsynced files
-            if (anySucceeded && state.unsyncedFiles.size > 0) {
-                console.log('Server is back online - retrying unsynced files...');
-                setTimeout(() => retrySyncUnsyncedFiles(), RETRY_SYNC_DELAY_MS);
-            }
         }
     } catch (error) {
         console.error('Error syncing files from Pyodide:', error);
-        // Don't show error to user - this is a background operation
+        state.terminal.write('⚠️  Failed to save Python-created files', 'error');
     }
 }
 
-// Start periodic check for syncing unsynced files
+// Start periodic check for syncing unsynced files (Phase 2 - not needed for local-only)
 function startSyncCheck() {
-    // Don't start multiple intervals
-    if (state.syncCheckInterval) return;
-
-    console.log('Starting periodic sync check (every 10 seconds)...');
-    state.syncCheckInterval = setInterval(async () => {
-        // Skip if sync already in progress
-        if (state.syncInProgress) {
-            console.log('Sync already in progress, skipping this interval');
-            return;
-        }
-
-        if (state.unsyncedFiles.size > 0) {
-            console.log('Checking if server is back online...');
-            state.syncInProgress = true;
-            try {
-                await retrySyncUnsyncedFiles();
-            } finally {
-                state.syncInProgress = false;
-            }
-        } else {
-            // All synced, stop checking
-            stopSyncCheck();
-        }
-    }, SYNC_CHECK_INTERVAL_MS);
+    // Stub: Phase 1 doesn't need server sync
 }
 
-// Stop periodic sync check
+// Stop periodic sync check (Phase 2 - not needed for local-only)
 function stopSyncCheck() {
-    if (state.syncCheckInterval) {
-        console.log('Stopping periodic sync check (all files synced)');
-        clearInterval(state.syncCheckInterval);
-        state.syncCheckInterval = null;
-    }
+    // Stub: Phase 1 doesn't need server sync  
 }
 
-// Retry syncing files that previously failed
+// Retry syncing files that previously failed (Phase 2 - not needed for local-only)
 async function retrySyncUnsyncedFiles() {
-    if (state.unsyncedFiles.size === 0) {
-        stopSyncCheck();
-        return;
-    }
-
-    const unsyncedPaths = Array.from(state.unsyncedFiles);
-    console.log(`Retrying sync for ${unsyncedPaths.length} unsynced file(s)...`);
-
-    const filesToRetry = state.files.filter(f => unsyncedPaths.includes(f.path));
-
-    if (filesToRetry.length === 0) return;
-
-    let anySucceeded = false;
-
-    // Try to create/update each unsynced file
-    for (const file of filesToRetry) {
-        try {
-            let response;
-
-            if (file.id) {
-                // File has an ID, try updating it
-                response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        files: [{ path: file.path, content: file.content }]
-                    }),
-                });
-            } else {
-                // No ID, create as new file
-                response = await fetch(`/api/trifles/${state.trifleId}/files`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: file.path, content: file.content }),
-                });
-            }
-
-            if (response.ok) {
-                state.unsyncedFiles.delete(file.path);
-                anySucceeded = true;
-                console.log(`✓ Successfully synced: ${file.path}`);
-            } else {
-                // Server responded but failed - log as warning
-                console.warn(`Failed to sync ${file.path}: ${response.status}`);
-            }
-        } catch (error) {
-            // Network failure (still offline) - don't log, just stop retrying
-            break;
-        }
-    }
-
-    if (anySucceeded) {
-        // We're back online!
-        if (state.isOffline) {
-            state.isOffline = false;
-            if (state.unsyncedFiles.size === 0) {
-                updateSavingIndicator('');  // Clear offline indicator
-            }
-        }
-
-        // Remember current file and editor state before reload
-        const currentFilePath = state.currentFile ? state.currentFile.path : null;
-        const cursorPosition = state.editor ? state.editor.getCursorPosition() : null;
-        const scrollTop = state.editor ? state.editor.session.getScrollTop() : null;
-        const editorContent = state.editor ? state.editor.getValue() : null;
-
-        // Reload to get updated file list with IDs
-        try {
-            await loadTrifle();
-
-            // Restore the current file if it exists
-            if (currentFilePath) {
-                const fileToReopen = state.files.find(f => f.path === currentFilePath);
-                if (fileToReopen && fileToReopen !== state.currentFile) {
-                    openFile(fileToReopen);
-
-                    // Restore editor state
-                    if (editorContent !== null && state.editor.getValue() !== editorContent) {
-                        // User had unsaved changes, restore them
-                        state.editor.setValue(editorContent, -1);
-                    }
-                    if (cursorPosition) {
-                        state.editor.moveCursorToPosition(cursorPosition);
-                        state.editor.clearSelection();
-                    }
-                    if (scrollTop !== null) {
-                        state.editor.session.setScrollTop(scrollTop);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Could not reload after retry:', error);
-        }
-
-        // Update file tree to remove warnings
-        renderFileTree();
-
-        if (state.unsyncedFiles.size === 0) {
-            state.terminal.write('✓ All files synced to server', 'info');
-            stopSyncCheck();
-        }
-    }
+    // Stub: Phase 1 doesn't need server sync
 }
 
 // Stop Python code execution
@@ -1161,7 +919,6 @@ function stopExecution() {
 
     // Clear any pending sync operations
     // (syncInProgress flag will be reset when worker restarts)
-    state.syncInProgress = false;
 
     // Reset UI
     finishExecution();
@@ -1202,27 +959,21 @@ function editTrifleTitle() {
         // Re-attach click listener
         h1.addEventListener('click', editTrifleTitle);
 
-        // If title changed, save to API
+        // If title changed, save to IndexedDB
         if (newTitle && newTitle !== currentTitle) {
             try {
-                const response = await fetch(`/api/trifles/${state.trifleId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        title: newTitle,
-                        description: state.trifle.description || '',
-                    }),
-                });
+                // Get current trifle data
+                const trifleData = await TrifleDB.getTrifleData(state.trifleId);
 
-                if (!response.ok) {
-                    throw new Error('Failed to update title');
-                }
+                // Update name
+                trifleData.name = newTitle;
+
+                // Save to IndexedDB
+                await TrifleDB.updateTrifle(state.trifleId, trifleData);
 
                 // Update state and page title
-                state.trifle.title = newTitle;
-                document.getElementById('pageTitle').textContent = `${newTitle} - Trifle`;
+                state.trifle.name = newTitle;
+                document.getElementById('pageTitle').textContent = `${newTitle} - Trifling`;
             } catch (error) {
                 console.error('Error updating title:', error);
                 alert('Failed to update title');
@@ -1426,11 +1177,6 @@ function setupEventListeners() {
             return e.returnValue;
         }
 
-        if (state.unsyncedFiles.size > 0) {
-            e.preventDefault();
-            e.returnValue = `${state.unsyncedFiles.size} file(s) not saved to server. Are you sure you want to leave?`;
-            return e.returnValue;
-        }
     });
 }
 

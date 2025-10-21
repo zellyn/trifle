@@ -12,10 +12,8 @@
 # Output of the go coverage tool
 *.out
 
-# Database
-/data/trifle.db
-/data/trifle.db-shm
-/data/trifle.db-wal
+# Data directory (KV store and user data)
+/data/
 
 # IDE
 .vscode/

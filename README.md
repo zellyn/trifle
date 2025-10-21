@@ -40,7 +40,7 @@ cd trifle
 
 2. Set environment variables:
 ```bash
-export GOOGLE_CLIENT_ID="957488163855-57odpu7dd2e9f9m44teermhuti95s43r.apps.googleusercontent.com"
+export GOOGLE_CLIENT_ID="$(op read 'op://Shared/Trifle/Google OAuth Client ID')"
 export GOOGLE_CLIENT_SECRET="$(op read 'op://Shared/Trifle/Google OAuth Client Secret')"
 ```
 
@@ -117,4 +117,4 @@ See [PLAN.md](PLAN.md) for detailed architecture and roadmap.
 
 ## License
 
-MIT
+GPLv3
