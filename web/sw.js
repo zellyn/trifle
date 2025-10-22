@@ -1,5 +1,5 @@
 // Trifling Service Worker - Enables offline functionality
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const CACHE_NAME = `trifling-${CACHE_VERSION}`;
 
 // Resources to cache on install
@@ -100,9 +100,28 @@ self.addEventListener('fetch', (event) => {
                 return cachedResponse;
             }
 
+            // If not found and URL has query params, try without them
+            if (url.search) {
+                const urlWithoutQuery = new URL(url.pathname, url.origin);
+                return caches.match(urlWithoutQuery).then((cachedResponseNoQuery) => {
+                    if (cachedResponseNoQuery) {
+                        console.log('[Service Worker] Serving from cache (no query):', url.pathname);
+                        return cachedResponseNoQuery;
+                    }
+
+                    // Not in cache, fetch from network
+                    return fetchFromNetwork();
+                });
+            }
+
             // Not in cache, fetch from network
-            console.log('[Service Worker] Fetching from network:', event.request.url);
-            return fetch(event.request).then((response) => {
+            return fetchFromNetwork();
+        })
+    );
+
+    function fetchFromNetwork() {
+        console.log('[Service Worker] Fetching from network:', event.request.url);
+        return fetch(event.request).then((response) => {
                 // Don't cache if not a valid response
                 if (!response || response.status !== 200 || response.type === 'error') {
                     return response;
@@ -132,8 +151,7 @@ self.addEventListener('fetch', (event) => {
 
                 throw err;
             });
-        })
-    );
+    }
 });
 
 // Message event - handle commands from the page

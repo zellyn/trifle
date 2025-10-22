@@ -222,6 +222,22 @@ function popoutCanvas() {
 
 // Initialize everything
 async function init() {
+    // Check for WebAssembly support
+    if (typeof WebAssembly === 'undefined') {
+        const message = 'WebAssembly is not available in this browser.\n\n' +
+            'Trifle requires WebAssembly to run Python code. This may be disabled due to:\n' +
+            '- Browser security policies (common in enterprise environments)\n' +
+            '- Browser compatibility (use a modern browser)\n' +
+            '- JIT compilation being disabled\n\n' +
+            'Please try:\n' +
+            '1. Using a different browser (Chrome, Firefox, Safari, or Edge)\n' +
+            '2. Checking your browser security settings\n' +
+            '3. Contacting your IT department if in a managed environment';
+        alert(message);
+        window.location.href = '/';
+        return;
+    }
+
     state.trifleId = getTrifleId();
 
     if (!state.trifleId) {
