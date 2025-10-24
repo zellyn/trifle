@@ -60,6 +60,35 @@ go run main.go
   - Example for production: `https://trifling.org/auth/callback`
   - The URL scheme determines secure cookie settings (https = secure)
 
+### Email Allowlist
+
+Access to sync is controlled by an allowlist at `data/allowlist.txt`. The file is automatically created with default entries if it doesn't exist:
+
+```
+zellyn@gmail.com
+@misstudent.com
+```
+
+**Format**:
+- One pattern per line
+- Exact email addresses: `user@example.com`
+- Domain wildcards: `@example.com` (allows all emails from that domain)
+- Comments: Lines starting with `#` are ignored
+- Empty lines are ignored
+
+**Example**:
+```
+# Individual users
+alice@example.com
+bob@gmail.com
+
+# Entire domains
+@mycompany.com
+@school.edu
+```
+
+The server logs which patterns are loaded on startup. Users not in the allowlist will see "Access denied: email not authorized" when attempting to log in.
+
 ## Development
 
 ### Project Structure

@@ -14,6 +14,7 @@ Local-first Python3 playground using Pyodide (WASM). All execution client-side. 
 - Pure KV store: server never parses user data
 - Logical clocks: conflict resolution for bidirectional sync
 - Email-based auth: no user IDs, email is identity
+- Email allowlist: `data/allowlist.txt` controls OAuth access (exact emails + @domain wildcards)
 - SameSite=Lax: for OAuth callback compatibility
 - Production mode: inferred from OAUTH_REDIRECT_URL scheme (https = secure cookies)
 - Reverse proxy friendly: designed for Caddy/nginx TLS termination

@@ -18,6 +18,7 @@ type OAuthConfig struct {
 	Config      *oauth2.Config
 	SessionMgr  *SessionManager
 	RedirectURL string
+	Allowlist   *Allowlist
 }
 
 // GoogleUser represents user info from Google
@@ -30,7 +31,7 @@ type GoogleUser struct {
 }
 
 // NewOAuthConfig creates a new OAuth configuration
-func NewOAuthConfig(clientID, clientSecret, redirectURL string, sessMgr *SessionManager) *OAuthConfig {
+func NewOAuthConfig(clientID, clientSecret, redirectURL string, sessMgr *SessionManager, allowlist *Allowlist) *OAuthConfig {
 	return &OAuthConfig{
 		Config: &oauth2.Config{
 			ClientID:     clientID,
@@ -44,6 +45,7 @@ func NewOAuthConfig(clientID, clientSecret, redirectURL string, sessMgr *Session
 		},
 		SessionMgr:  sessMgr,
 		RedirectURL: redirectURL,
+		Allowlist:   allowlist,
 	}
 }
 
@@ -129,6 +131,13 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	if !userInfo.VerifiedEmail {
 		slog.Warn("Email not verified", "email", userInfo.Email)
 		http.Error(w, "Email not verified with Google", http.StatusForbidden)
+		return
+	}
+
+	// Check if email is in allowlist
+	if !oc.Allowlist.IsAllowed(userInfo.Email) {
+		slog.Warn("Email not in allowlist", "email", userInfo.Email)
+		http.Error(w, "Access denied: email not authorized", http.StatusForbidden)
 		return
 	}
 

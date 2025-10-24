@@ -65,13 +65,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load email allowlist
+	allowlistPath := fmt.Sprintf("%s/allowlist.txt", dataDir)
+	allowlist, err4 := auth.NewAllowlist(allowlistPath)
+	if err4 != nil {
+		slog.Error("Failed to load allowlist", "error", err4, "path", allowlistPath)
+		os.Exit(1)
+	}
+
 	// Initialize OAuth config
-	oauthConfig := auth.NewOAuthConfig(clientID, clientSecret, redirectURL, sessionMgr)
+	oauthConfig := auth.NewOAuthConfig(clientID, clientSecret, redirectURL, sessionMgr, allowlist)
 
 	// Set up web filesystem
-	webContent, err4 := fs.Sub(webFS, "web")
-	if err4 != nil {
-		slog.Error("Failed to get web subdirectory", "error", err4)
+	webContent, err5 := fs.Sub(webFS, "web")
+	if err5 != nil {
+		slog.Error("Failed to get web subdirectory", "error", err5)
 		os.Exit(1)
 	}
 
