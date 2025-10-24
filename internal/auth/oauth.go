@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 
 	"golang.org/x/oauth2"
@@ -79,10 +80,15 @@ func (oc *OAuthConfig) HandleLogin(w http.ResponseWriter, r *http.Request) {
 func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Helper function to redirect to homepage with error message
+	redirectWithError := func(message string) {
+		http.Redirect(w, r, "/?error="+url.QueryEscape(message), http.StatusSeeOther)
+	}
+
 	// Check for error from Google
 	if errMsg := r.URL.Query().Get("error"); errMsg != "" {
 		slog.Error("OAuth error from Google", "error", errMsg)
-		http.Error(w, fmt.Sprintf("OAuth error: %s", errMsg), http.StatusBadRequest)
+		redirectWithError("OAuth login failed. Please try again.")
 		return
 	}
 
@@ -90,7 +96,7 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	session, err := oc.SessionMgr.GetSession(r)
 	if err != nil || session == nil {
 		slog.Warn("Invalid session in callback", "error", err)
-		http.Error(w, "Invalid session - please try logging in again", http.StatusBadRequest)
+		redirectWithError("Invalid session. Please try logging in again.")
 		return
 	}
 
@@ -98,7 +104,7 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	if state == "" || state != session.OAuthState {
 		slog.Warn("State mismatch", "got", state, "expected", session.OAuthState)
-		http.Error(w, "Invalid state parameter - please try logging in again", http.StatusBadRequest)
+		redirectWithError("Security check failed. Please try logging in again.")
 		return
 	}
 
@@ -106,14 +112,14 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		slog.Warn("No code in callback")
-		http.Error(w, "No authorization code received", http.StatusBadRequest)
+		redirectWithError("No authorization code received. Please try again.")
 		return
 	}
 
 	token, err := oc.Config.Exchange(ctx, code)
 	if err != nil {
 		slog.Error("Failed to exchange token", "error", err)
-		http.Error(w, fmt.Sprintf("Failed to exchange token: %v", err), http.StatusInternalServerError)
+		redirectWithError("Failed to complete login. Please try again.")
 		return
 	}
 
@@ -121,7 +127,7 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := oc.getUserInfo(ctx, token)
 	if err != nil {
 		slog.Error("Failed to get user info", "error", err)
-		http.Error(w, fmt.Sprintf("Failed to get user info: %v", err), http.StatusInternalServerError)
+		redirectWithError("Failed to get user information. Please try again.")
 		return
 	}
 
@@ -130,14 +136,14 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	// Check if email is verified
 	if !userInfo.VerifiedEmail {
 		slog.Warn("Email not verified", "email", userInfo.Email)
-		http.Error(w, "Email not verified with Google", http.StatusForbidden)
+		redirectWithError("Email not verified with Google. Please verify your email.")
 		return
 	}
 
 	// Check if email is in allowlist
 	if !oc.Allowlist.IsAllowed(userInfo.Email) {
 		slog.Warn("Email not in allowlist", "email", userInfo.Email)
-		http.Error(w, "Access denied: email not authorized", http.StatusForbidden)
+		redirectWithError("Your email (" + userInfo.Email + ") is not authorized for sync. The site works fine without logging in! Contact zellyn@gmail.com if you need sync access.")
 		return
 	}
 
@@ -152,7 +158,7 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if err := oc.SessionMgr.Save(w, session); err != nil {
 		slog.Error("Failed to save session", "error", err)
-		http.Error(w, "Failed to save session", http.StatusInternalServerError)
+		redirectWithError("Failed to save login session. Please try again.")
 		return
 	}
 

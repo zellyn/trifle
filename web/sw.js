@@ -1,5 +1,5 @@
 // Trifling Service Worker - Enables offline functionality
-const CACHE_VERSION = 'v15';
+const CACHE_VERSION = 'v16';
 const CACHE_NAME = `trifling-${CACHE_VERSION}`;
 
 // Resources to cache on install
@@ -13,6 +13,7 @@ const STATIC_CACHE = [
     '/js/editor.js',
     '/js/db.js',
     '/js/namegen.js',
+    '/js/notifications.js',
     '/js/worker.js',
     '/js/terminal.js',
     '/js/sync-kv.js'

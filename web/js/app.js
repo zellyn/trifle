@@ -6,6 +6,7 @@
 import { generateName } from './namegen.js';
 import { TrifleDB } from './db.js';
 import { SyncManager } from './sync-kv.js';
+import { showError } from './notifications.js';
 
 // Current user (cached after init)
 let currentUser = null;
@@ -15,6 +16,15 @@ let currentUser = null;
  */
 async function init() {
     try {
+        // Check for OAuth error in URL (from failed login)
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorMsg = urlParams.get('error');
+        if (errorMsg) {
+            showError(errorMsg);
+            // Clean up URL without reloading
+            window.history.replaceState({}, '', '/');
+        }
+
         // Initialize user (create if doesn't exist)
         await initUser();
 
@@ -255,7 +265,7 @@ async function deleteTrifle(trifle, data) {
         await loadTrifles();
     } catch (error) {
         console.error('Error deleting trifle:', error);
-        alert('Failed to delete trifle. Please try again.');
+        showError('Failed to delete trifle. Please try again.');
     }
 }
 
@@ -340,7 +350,7 @@ async function editDescription(trifle, data, descriptionTextElement, description
                 data.description = newDescription;
             } catch (error) {
                 console.error('Error updating description:', error);
-                alert('Failed to update description. Please try again.');
+                showError('Failed to update description. Please try again.');
                 // Restore old description on error
                 descriptionText.textContent = currentDescription || 'No description';
             }
@@ -525,17 +535,8 @@ function formatTimeAgo(timestamp) {
     }
 }
 
-/**
- * Show error message to user
- */
-function showError(message) {
-    const errorDiv = document.getElementById('errorMessage');
-    if (errorDiv) {
-        errorDiv.innerHTML = `<div class="error">${message}</div>`;
-    } else {
-        alert(message);
-    }
-}
+// Note: showError is now imported from notifications.js
+// It displays a dismissible notification banner instead of using alert()
 
 // Initialize on DOM ready
 if (document.readyState === 'loading') {

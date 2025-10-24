@@ -2,6 +2,7 @@
 // Handles file tree, Ace editor, Pyodide integration, and auto-save
 
 import { TrifleDB } from './db.js';
+import { showError, showInfo } from './notifications.js';
 
 // Constants
 const SYNC_CHECK_INTERVAL_MS = 10000;  // Check for offline sync every 10 seconds
@@ -100,7 +101,7 @@ function popoutCanvas() {
     const popoutWindow = window.open('', 'Canvas', `width=${windowWidth},height=${windowHeight}`);
 
     if (!popoutWindow) {
-        alert('Please allow pop-ups for this site to use the canvas pop-out feature');
+        showInfo('Please allow pop-ups for this site to use the canvas pop-out feature', 0);
         return;
     }
 
@@ -233,7 +234,7 @@ async function init() {
             '1. Using a different browser (Chrome, Firefox, Safari, or Edge)\n' +
             '2. Checking your browser security settings\n' +
             '3. Contacting your IT department if in a managed environment';
-        alert(message);
+        showError(message);
         window.location.href = '/';
         return;
     }
@@ -241,7 +242,7 @@ async function init() {
     state.trifleId = getTrifleId();
 
     if (!state.trifleId) {
-        alert('Invalid trifle ID');
+        showError('Invalid trifle ID');
         window.location.href = '/';
         return;
     }
@@ -456,7 +457,7 @@ async function createFile(path, content = '') {
         openFile(newFile);
     } catch (error) {
         console.error('Error creating file:', error);
-        alert(`Failed to create file: ${error.message}`);
+        showError(`Failed to create file: ${error.message}`);
     }
 }
 
@@ -492,7 +493,7 @@ async function deleteFile(file) {
         renderFileTree();
     } catch (error) {
         console.error('Error deleting file:', error);
-        alert('Failed to delete file');
+        showError('Failed to delete file');
     }
 }
 
@@ -538,7 +539,7 @@ async function saveCurrentFile() {
     } catch (error) {
         console.error('Error saving file:', error);
         updateSavingIndicator('error');
-        alert('Failed to save file');
+        showError('Failed to save file');
     }
 }
 
@@ -785,14 +786,14 @@ async function initWorker() {
     } catch (error) {
         console.error('Failed to create worker:', error);
         loadingMessage.textContent = 'Failed to load Python runtime';
-        alert('Failed to load Python runtime. Please refresh the page.');
+        showError('Failed to load Python runtime. Please refresh the page.');
     }
 }
 
 // Run Python code (using worker)
 async function runCode() {
     if (!state.workerReady) {
-        alert('Python runtime not loaded yet');
+        showInfo('Python runtime not loaded yet', 0);
         return;
     }
 
@@ -992,7 +993,7 @@ function editTrifleTitle() {
                 document.getElementById('pageTitle').textContent = `${newTitle} - Trifling`;
             } catch (error) {
                 console.error('Error updating title:', error);
-                alert('Failed to update title');
+                showError('Failed to update title');
                 // Restore old title on error
                 h1.textContent = currentTitle;
             }
@@ -1161,13 +1162,13 @@ function setupEventListeners() {
 
         // Validate path
         if (path.includes('..') || path.startsWith('/')) {
-            alert('Invalid file path');
+            showError('Invalid file path');
             return;
         }
 
         // Check if file already exists
         if (state.files.find(f => f.path === path)) {
-            alert('File already exists');
+            showError('File already exists');
             return;
         }
 
