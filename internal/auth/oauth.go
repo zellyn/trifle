@@ -80,9 +80,9 @@ func (oc *OAuthConfig) HandleLogin(w http.ResponseWriter, r *http.Request) {
 func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Helper function to redirect to homepage with error message
+	// Helper function to redirect to profile page with error message
 	redirectWithError := func(message string) {
-		http.Redirect(w, r, "/?error="+url.QueryEscape(message), http.StatusSeeOther)
+		http.Redirect(w, r, "/profile.html?error="+url.QueryEscape(message), http.StatusSeeOther)
 	}
 
 	// Check for error from Google
@@ -162,8 +162,8 @@ func (oc *OAuthConfig) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect to home page
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	// Redirect to profile page with logged_in flag to trigger auto-sync
+	http.Redirect(w, r, "/profile.html?logged_in=true", http.StatusSeeOther)
 }
 
 // getUserInfo fetches user information from Google

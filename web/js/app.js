@@ -7,6 +7,7 @@ import { generateName } from './namegen.js';
 import { TrifleDB } from './db.js';
 import { SyncManager } from './sync-kv.js';
 import { showError } from './notifications.js';
+import { generateAvatar } from './avatar.js';
 
 // Current user (cached after init)
 let currentUser = null;
@@ -64,89 +65,58 @@ async function initUser() {
 /**
  * Update user display in the UI
  */
-function updateUserDisplay(displayName) {
+async function updateUserDisplay(displayName) {
     const nameElement = document.getElementById('profileName');
     if (nameElement) {
         nameElement.textContent = displayName;
     }
+
+    // Update avatar
+    const avatarElement = document.querySelector('.profile-avatar');
+    if (avatarElement) {
+        const userData = await TrifleDB.getUserData(currentUser.id);
+        if (userData.avatar) {
+            // User has a custom avatar - render it
+            const svg = generateAvatar(userData.avatar);
+            avatarElement.innerHTML = svg;
+        } else {
+            // No custom avatar - show placeholder
+            avatarElement.textContent = '👤';
+        }
+    }
 }
 
 /**
- * Update sync status in the UI
+ * Update sync status in the footer
  */
 async function updateSyncStatus() {
-    const statusElement = document.getElementById('profileStatus');
-    const loginSyncBtn = document.getElementById('loginSyncBtn');
-
-    if (!statusElement || !loginSyncBtn) return;
+    const syncStatusEl = document.getElementById('syncStatus');
+    if (!syncStatusEl) return;
 
     // Check if logged in
     const loggedIn = await SyncManager.isLoggedIn();
     const syncStatus = SyncManager.getSyncStatus();
 
+    // Remove all status classes
+    syncStatusEl.className = 'sync-status';
+
     if (loggedIn) {
         // Logged in - show sync status
         if (syncStatus.synced && syncStatus.lastSync) {
             const lastSyncTime = formatTimeAgo(syncStatus.lastSync);
-            statusElement.textContent = `Synced ${lastSyncTime}${syncStatus.email ? ' • ' + syncStatus.email : ''}`;
+            syncStatusEl.textContent = `✓ Synced ${lastSyncTime}`;
+            syncStatusEl.classList.add('synced');
         } else {
-            statusElement.textContent = 'Logged in • Not synced yet';
+            syncStatusEl.textContent = 'Logged in • Not synced';
+            syncStatusEl.classList.add('not-synced');
         }
-        loginSyncBtn.textContent = 'Sync Now';
-        loginSyncBtn.className = 'btn btn-primary';
     } else {
         // Not logged in
-        statusElement.textContent = 'Local only • Not synced';
-        loginSyncBtn.textContent = 'Login & Sync';
-        loginSyncBtn.className = 'btn btn-primary';
+        syncStatusEl.textContent = 'Not synced';
+        syncStatusEl.classList.add('not-synced');
     }
 }
 
-/**
- * Handle login and sync
- */
-async function handleLoginSync() {
-    const loggedIn = await SyncManager.isLoggedIn();
-
-    if (!loggedIn) {
-        // Not logged in - redirect to OAuth
-        window.location.href = '/auth/login';
-        return;
-    }
-
-    // Already logged in - trigger sync
-    const btn = document.getElementById('loginSyncBtn');
-    if (btn) {
-        btn.textContent = 'Syncing...';
-        btn.disabled = true;
-    }
-
-    try {
-        const result = await SyncManager.sync();
-
-        if (result.success) {
-            // Sync successful - reload user data, trifles, and status
-            currentUser = await TrifleDB.getCurrentUser();
-            const userData = await TrifleDB.getUserData(currentUser.id);
-            updateUserDisplay(userData.display_name);
-
-            await loadTrifles();
-            await updateSyncStatus();
-            console.log('[Sync] Sync completed successfully');
-        } else {
-            console.error('[Sync] Sync failed:', result.error);
-            showError('Sync failed: ' + result.error);
-        }
-    } catch (error) {
-        console.error('[Sync] Sync error:', error);
-        showError('Sync failed. Please try again.');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            await updateSyncStatus(); // Restore button text
-        }
-    }
-}
 
 /**
  * Load and display all trifles for current user
@@ -412,41 +382,9 @@ async function handleNewTrifle(title, description) {
 }
 
 /**
- * Handle re-rolling the user's display name
- */
-async function handleRerollName() {
-    try {
-        const newName = generateName();
-        const userData = await TrifleDB.getUserData(currentUser.id);
-        userData.display_name = newName;
-        await TrifleDB.updateUser(currentUser.id, userData);
-
-        // Update UI
-        updateUserDisplay(newName);
-
-        console.log('Name re-rolled to:', newName);
-    } catch (error) {
-        console.error('Failed to re-roll name:', error);
-        showError('Failed to change name. Please try again.');
-    }
-}
-
-/**
  * Set up event listeners
  */
 function setupEventListeners() {
-    // Re-roll name button
-    const rerollBtn = document.getElementById('rerollNameBtn');
-    if (rerollBtn) {
-        rerollBtn.addEventListener('click', handleRerollName);
-    }
-
-    // Login & Sync button
-    const loginSyncBtn = document.getElementById('loginSyncBtn');
-    if (loginSyncBtn) {
-        loginSyncBtn.addEventListener('click', handleLoginSync);
-    }
-
     // Modal handling
     const modal = document.getElementById('newTrifleModal');
     const newTrifleBtn = document.getElementById('newTrifleBtn');

@@ -16,19 +16,15 @@
 
     <div class="container">
         <!-- User Profile Card -->
-        <div class="profile-card">
+        <a href="/profile.html" class="profile-card profile-card-link">
             <div class="profile-info">
                 <div class="profile-avatar">👤</div>
                 <div class="profile-details">
                     <h2 class="profile-name" id="profileName">Loading...</h2>
-                    <p class="profile-status" id="profileStatus">Local only • Not synced</p>
+                    <p class="profile-hint">Click to customize</p>
                 </div>
             </div>
-            <div class="profile-actions">
-                <button class="btn btn-secondary" id="rerollNameBtn">Re-roll name</button>
-                <button class="btn btn-primary" id="loginSyncBtn">Login & Sync</button>
-            </div>
-        </div>
+        </a>
 
         <div class="header-row">
             <h2 class="page-title">Your Trifles</h2>
@@ -77,5 +73,12 @@
             });
         }
     </script>
+
+    <!-- Footer with sync status -->
+    <footer class="footer">
+        <div class="footer-content">
+            <span id="syncStatus" class="sync-status">Not synced</span>
+        </div>
+    </footer>
 </body>
 </html>

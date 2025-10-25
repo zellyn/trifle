@@ -60,6 +60,19 @@ body {
     align-items: center;
 }
 
+.profile-card-link {
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s;
+}
+
+.profile-card-link:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: #667eea;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
 .profile-info {
     display: flex;
     align-items: center;
@@ -74,7 +87,13 @@ body {
     align-items: center;
     justify-content: center;
     background: #f0f4ff;
-    border-radius: 50%;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.profile-avatar svg {
+    width: 100%;
+    height: 100%;
 }
 
 .profile-name {
@@ -84,14 +103,9 @@ body {
     margin-bottom: 4px;
 }
 
-.profile-status {
+.profile-hint {
     font-size: 12px;
     color: #999;
-}
-
-.profile-actions {
-    display: flex;
-    gap: 12px;
 }
 
 .header-row {
@@ -476,4 +490,39 @@ body {
 
 .notification-close:active {
     background: rgba(0, 0, 0, 0.2);
+}
+
+/* Footer */
+.footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.9);
+    border-top: 1px solid rgba(225, 228, 232, 0.5);
+    padding: 8px 24px;
+    font-size: 12px;
+    color: #666;
+}
+
+.footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.sync-status {
+    cursor: default;
+}
+
+.sync-status.synced {
+    color: #27ae60;
+}
+
+.sync-status.not-synced {
+    color: #999;
+}
+
+.sync-status.offline {
+    color: #e74c3c;
 }
