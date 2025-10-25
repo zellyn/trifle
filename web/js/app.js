@@ -91,6 +91,7 @@ async function updateUserDisplay(displayName) {
  */
 async function updateSyncStatus() {
     const syncStatusEl = document.getElementById('syncStatus');
+    const syncBtnEl = document.getElementById('footerSyncBtn');
     if (!syncStatusEl) return;
 
     // Check if logged in
@@ -101,7 +102,7 @@ async function updateSyncStatus() {
     syncStatusEl.className = 'sync-status';
 
     if (loggedIn) {
-        // Logged in - show sync status
+        // Logged in - show sync status and sync button
         if (syncStatus.synced && syncStatus.lastSync) {
             const lastSyncTime = formatTimeAgo(syncStatus.lastSync);
             syncStatusEl.textContent = `✓ Synced ${lastSyncTime}`;
@@ -110,13 +111,58 @@ async function updateSyncStatus() {
             syncStatusEl.textContent = 'Logged in • Not synced';
             syncStatusEl.classList.add('not-synced');
         }
+
+        // Show sync button when logged in
+        if (syncBtnEl) {
+            syncBtnEl.style.display = 'inline-block';
+        }
     } else {
         // Not logged in
         syncStatusEl.textContent = 'Not synced';
         syncStatusEl.classList.add('not-synced');
+
+        // Hide sync button when not logged in
+        if (syncBtnEl) {
+            syncBtnEl.style.display = 'none';
+        }
     }
 }
 
+/**
+ * Handle sync button click
+ */
+async function handleSync() {
+    const syncBtn = document.getElementById('footerSyncBtn');
+    if (!syncBtn) return;
+
+    // Disable button and show syncing state
+    syncBtn.disabled = true;
+    syncBtn.textContent = 'Syncing...';
+
+    try {
+        const result = await SyncManager.sync();
+
+        if (result.success) {
+            // Sync successful - reload user data and trifles
+            currentUser = await TrifleDB.getCurrentUser();
+            const userData = await TrifleDB.getUserData(currentUser.id);
+            await updateUserDisplay(userData.display_name);
+            await loadTrifles();
+            await updateSyncStatus();
+            console.log('[Sync] Sync completed successfully');
+        } else {
+            console.error('[Sync] Sync failed:', result.error);
+            showError('Sync failed: ' + result.error);
+        }
+    } catch (error) {
+        console.error('[Sync] Sync error:', error);
+        showError('Sync failed. Please try again.');
+    } finally {
+        // Re-enable button and restore text
+        syncBtn.disabled = false;
+        syncBtn.textContent = 'Sync Now';
+    }
+}
 
 /**
  * Load and display all trifles for current user
@@ -447,6 +493,12 @@ function setupEventListeners() {
 
             await handleNewTrifle(title, description);
         });
+    }
+
+    // Footer sync button
+    const footerSyncBtn = document.getElementById('footerSyncBtn');
+    if (footerSyncBtn) {
+        footerSyncBtn.addEventListener('click', handleSync);
     }
 }
 

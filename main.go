@@ -129,7 +129,8 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		slog.Info("Trifle server starting", "port", port, "oauth_redirect", redirectURL)
+		serverURL := fmt.Sprintf("http://localhost:%s/", port)
+		slog.Info("Trifle server starting", "url", serverURL)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Server failed", "error", err)
 			os.Exit(1)

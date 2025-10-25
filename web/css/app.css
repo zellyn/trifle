@@ -508,7 +508,10 @@ body {
 .footer-content {
     max-width: 1200px;
     margin: 0 auto;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 }
 
 .sync-status {
@@ -525,4 +528,26 @@ body {
 
 .sync-status.offline {
     color: #e74c3c;
+}
+
+.footer-sync-btn {
+    background: transparent;
+    color: #667eea;
+    border: 1px solid #667eea;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.footer-sync-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+.footer-sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
