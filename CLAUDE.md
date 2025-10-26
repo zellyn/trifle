@@ -22,7 +22,17 @@ Local-first Python3 playground using Pyodide (WASM). All execution client-side. 
 ## Module Organization
 - `internal/auth/` - OAuth, sessions (email-based)
 - `internal/kv/` - File-based KV store for sync
-- `web/js/` - app.js (list), db.js (IndexedDB), editor.js (Ace+Pyodide), sync-kv.js, namegen.js
+- `web/js/` - Core modules:
+  - `app.js` - Homepage trifle list
+  - `db.js` - IndexedDB abstraction (content-addressable)
+  - `editor.js` - Ace + Pyodide integration
+  - `profile.js` - Profile page with avatar editor
+  - `avatar.js` - Avatar SVG generation
+  - `avatar-editor.js` - Drag-and-drop shape manipulation
+  - `data.js` - Import/export functionality
+  - `sync-kv.js` - Server sync logic
+  - `namegen.js` - Random name generation
+  - `notifications.js` - Dismissible banner notifications
 - `web/sw.js` - Service worker (**bump version** when cache behavior changes)
 
 ## Service Worker
@@ -48,10 +58,47 @@ data/
 - `file/*` is public (content-addressed)
 - Version ID = `version_{hash[0:16]}`
 
+## User Profile Storage
+Profile stored in IndexedDB under user data blob:
+```json
+{
+  "display_name": "Random Name",
+  "avatar": {
+    "shapes": [
+      {"id": 1, "type": "ellipse", "x": 100, "y": 100, "rx": 25, "ry": 20, "color": "#FFD5A5", "rotation": 0},
+      {"id": 2, "type": "circle", "x": 85, "y": 90, "r": 5, "color": "#2C1810", "rotation": 0}
+    ],
+    "bgColor": "#E8F4F8"
+  },
+  "settings": {...}
+}
+```
+
+## Avatar Editor (`/profile.html`)
+Felt-style SVG drag-and-drop editor:
+- **Shape palette**: circles, ellipses, rectangles, body shapes (3 variants), facial features (eye, straight line, smile)
+- **Manipulation**: drag to move, handles for resize/rotate, Option-drag to duplicate
+- **Limits**: 200 shapes max, auto-delete when dragged completely off canvas (0-200 viewBox)
+- **Shape IDs**: Integer-based (finds lowest unused), survives page reloads
+- **Z-order**: "Send to Front/Back" controls
+- **Storage**: Saved in user profile as `avatar: {shapes, bgColor}`
+
+## Data Import/Export (`/data.html`)
+Local backup and restore without OAuth:
+- **Export**: Selective checklist (profile + trifles), downloads JSON with all file contents
+  - Filename: `trifle-NAME.json` (single) or `trifling-backup-YYYY-MM-DD.json` (multiple)
+- **Import**: Upload JSON, shows smart conflict resolution
+  - Profile: Compare avatars/timestamps, recommend newer
+  - Trifles: Match by ID, compare timestamps, recommend newer
+  - Actions: Import/Skip (profile), Overwrite/Rename/Skip (trifles)
+  - Bulk buttons: Import All, Skip All, Use Recommendations
+- **Format**: JSON with `{version: 1, profile: {...}, trifles: [{...file_contents...}]}`
+
 ## Shortcuts
 - **Cmd/Ctrl+Enter**: Run code
 - **Cmd/Ctrl+Enter** in modal: Submit
 - **Esc** in modal: Cancel
+- **Delete/Backspace**: Delete selected avatar shape
 - Auto-save after 1s idle
 
 ## Run Locally
