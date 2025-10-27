@@ -179,14 +179,46 @@ func (h *Handlers) checkAuth(r *http.Request, key string) error {
 		return nil
 	}
 
-	// For user/* keys, check email matches
-	if strings.HasPrefix(key, "user/") {
-		// Get user email from context (set by auth middleware)
-		email, ok := r.Context().Value("user_email").(string)
-		if !ok {
-			return fmt.Errorf("not authenticated")
+	// Get user email from context (set by auth middleware)
+	email, ok := r.Context().Value("user_email").(string)
+	if !ok {
+		return fmt.Errorf("not authenticated")
+	}
+
+	// Normalize email to lowercase for consistent key generation
+	email = strings.ToLower(email)
+
+	// Parse email into domain and localpart
+	atIndex := strings.LastIndex(email, "@")
+	if atIndex == -1 || atIndex == 0 || atIndex == len(email)-1 {
+		return fmt.Errorf("invalid email format")
+	}
+	localpart := email[:atIndex]
+	domain := email[atIndex+1:]
+
+	// For domain/* keys: domain/{domain}/user/{localpart}/...
+	if strings.HasPrefix(key, "domain/") {
+		// Extract domain and localpart from key
+		parts := strings.SplitN(key, "/", 5)
+		if len(parts) < 4 {
+			return fmt.Errorf("invalid key format")
 		}
 
+		keyDomain := parts[1]
+		if parts[2] != "user" {
+			return fmt.Errorf("invalid key format: expected 'user' segment")
+		}
+		keyLocalpart := parts[3]
+
+		if keyDomain != domain || keyLocalpart != localpart {
+			return fmt.Errorf("access denied: cannot access other user's data")
+		}
+
+		return nil
+	}
+
+	// For user/* keys (legacy format), check email matches
+	if strings.HasPrefix(key, "user/") {
 		// Extract email from key: user/{email}/...
 		parts := strings.SplitN(key, "/", 3)
 		if len(parts) < 2 {

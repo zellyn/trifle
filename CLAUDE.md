@@ -49,14 +49,17 @@ Local-first Python3 playground using Pyodide (WASM). All execution client-side. 
 ## KV Sync Schema
 ```
 data/
-├── user/{email}/profile                              # Profile JSON
-├── user/{email}/trifle/latest/{trifle_id}/{version}  # Pointer (empty)
-├── user/{email}/trifle/version/{version}             # Metadata + file refs
-└── file/{hash[0:2]}/{hash[2:4]}/{hash}               # Global, content-addressed
+├── domain/{domain}/user/{localpart}/profile                              # Profile JSON
+├── domain/{domain}/user/{localpart}/trifle/latest/{trifle_id}/{version}  # Pointer (empty)
+├── domain/{domain}/user/{localpart}/trifle/version/{version}             # Metadata + file refs
+└── file/{hash[0:2]}/{hash[2:4]}/{hash}                                   # Global, content-addressed
 ```
-- Email-based access control
+- Domain-organized: `email@domain.com` → `/domain/domain.com/user/email/`
+- Enables domain-level features (e.g., `/domain/myschool.edu/classes/`)
+- Email-based access control (localpart@domain)
 - `file/*` is public (content-addressed)
 - Version ID = `version_{hash[0:16]}`
+- **Migration**: Client automatically migrates old `/user/{email}/` format on first sync
 
 ## User Profile Storage
 Profile stored in IndexedDB under user data blob:

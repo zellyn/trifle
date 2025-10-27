@@ -5,6 +5,8 @@ const SYNC_STATUS_KEY = 'trifling_sync_status';
 
 // SyncManager handles bidirectional sync using KV API
 export const SyncManager = {
+    _syncInProgress: false,
+
     // Check if user is logged in (has session cookie)
     async isLoggedIn() {
         try {
@@ -47,8 +49,133 @@ export const SyncManager = {
         localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify(status));
     },
 
+    // Parse email into domain and localpart
+    parseEmail(email) {
+        const lastAt = email.lastIndexOf('@');
+        if (lastAt === -1) {
+            throw new Error(`Invalid email format: ${email}`);
+        }
+        return {
+            localpart: email.substring(0, lastAt),
+            domain: email.substring(lastAt + 1)
+        };
+    },
+
+    // Get user key prefix (new format)
+    getUserPrefix(email) {
+        const { domain, localpart } = this.parseEmail(email);
+        return `domain/${domain}/user/${localpart}`;
+    },
+
+    // Get old user key prefix (for migration)
+    getOldUserPrefix(email) {
+        return `user/${email}`;
+    },
+
+    // Migrate from old key format to new format
+    async migrateToNewFormat(email) {
+        const oldPrefix = this.getOldUserPrefix(email);
+        const newPrefix = this.getUserPrefix(email);
+
+        console.log(`[Sync] Checking for migration from ${oldPrefix} to ${newPrefix}`);
+
+        // Check if old format exists
+        const oldProfileKey = `${oldPrefix}/profile`;
+        const oldProfile = await this.kvGet(oldProfileKey);
+
+        if (!oldProfile) {
+            console.log('[Sync] No old format data found, skipping migration');
+            return;
+        }
+
+        console.log('[Sync] Found old format data, starting migration');
+
+        try {
+            // Migrate profile
+            const newProfileKey = `${newPrefix}/profile`;
+            await this.kvPut(newProfileKey, oldProfile);
+            console.log('[Sync] Migrated profile');
+
+            // List all old trifle data
+            const oldLatestPrefix = `${oldPrefix}/trifle/latest/`;
+            const oldLatestKeys = await this.kvList(oldLatestPrefix, 2);
+
+            // Migrate each trifle's latest pointer and version data
+            for (const oldLatestKey of oldLatestKeys) {
+                // Parse: user/{email}/trifle/latest/{trifle_id}/{version_id}
+                const parts = oldLatestKey.split('/');
+                if (parts.length >= 6) {
+                    const trifleID = parts[4];
+                    const versionID = parts[5];
+
+                    // Migrate latest pointer
+                    const newLatestKey = `${newPrefix}/trifle/latest/${trifleID}/${versionID}`;
+                    await this.kvPutRaw(newLatestKey, '');
+                    console.log(`[Sync] Migrated latest pointer for trifle ${trifleID}`);
+
+                    // Migrate version data
+                    const oldVersionKey = `${oldPrefix}/trifle/version/${versionID}`;
+                    const versionData = await this.kvGet(oldVersionKey);
+                    if (versionData) {
+                        const newVersionKey = `${newPrefix}/trifle/version/${versionID}`;
+                        await this.kvPut(newVersionKey, versionData);
+                        console.log(`[Sync] Migrated version data for ${versionID}`);
+                    }
+                }
+            }
+
+            // Verify migration by checking all new keys exist
+            const newProfile = await this.kvGet(newProfileKey);
+            if (!newProfile) {
+                throw new Error('Migration verification failed: profile not found at new location');
+            }
+
+            // Verify each trifle was migrated
+            for (const oldLatestKey of oldLatestKeys) {
+                const parts = oldLatestKey.split('/');
+                if (parts.length >= 6) {
+                    const versionID = parts[5];
+                    const newVersionKey = `${newPrefix}/trifle/version/${versionID}`;
+                    const verified = await this.kvGet(newVersionKey);
+                    if (!verified) {
+                        throw new Error(`Migration verification failed: trifle ${versionID} not found at new location`);
+                    }
+                }
+            }
+
+            // Delete old keys
+            console.log('[Sync] Verifying migration successful, deleting old keys');
+            await this.kvDelete(oldProfileKey);
+
+            for (const oldLatestKey of oldLatestKeys) {
+                const parts = oldLatestKey.split('/');
+                if (parts.length >= 6) {
+                    const versionID = parts[5];
+                    const oldVersionKey = `${oldPrefix}/trifle/version/${versionID}`;
+                    await this.kvDelete(oldLatestKey);
+                    await this.kvDelete(oldVersionKey);
+                }
+            }
+
+            console.log('[Sync] Migration completed successfully');
+
+        } catch (error) {
+            console.error('[Sync] Migration failed:', error);
+            throw new Error(`Migration failed: ${error.message}`);
+        }
+    },
+
     // Full sync: bidirectional sync between client and server
     async sync() {
+        // Prevent concurrent syncs
+        if (this._syncInProgress) {
+            console.log('[Sync] Sync already in progress, skipping');
+            return {
+                success: false,
+                error: 'Sync already in progress'
+            };
+        }
+
         const loggedIn = await this.isLoggedIn();
         if (!loggedIn) {
             return {
@@ -57,6 +184,7 @@ export const SyncManager = {
             };
         }
 
+        this._syncInProgress = true;
         try {
             // Get local user
             const localUser = await TrifleDB.getCurrentUser();
@@ -72,6 +200,9 @@ export const SyncManager = {
             }
 
             console.log('[Sync] Starting sync for', email);
+
+            // Step 0: Check for and perform migration if needed
+            await this.migrateToNewFormat(email);
 
             // Step 1: Sync user profile
             await this.syncUserProfile(email, localUser, localUserData);
@@ -93,12 +224,15 @@ export const SyncManager = {
         } catch (error) {
             console.error('[Sync] Sync failed:', error);
             return { success: false, error: error.message };
+        } finally {
+            this._syncInProgress = false;
         }
     },
 
     // Sync user profile
     async syncUserProfile(email, localUser, localUserData) {
-        const profileKey = `user/${email}/profile`;
+        const userPrefix = this.getUserPrefix(email);
+        const profileKey = `${userPrefix}/profile`;
 
         try {
             // Include metadata in profile for comparison
@@ -138,16 +272,17 @@ export const SyncManager = {
     // Sync all trifles
     async syncTrifles(email, localTrifles) {
         // List server's latest trifle pointers
-        const latestPrefix = `user/${email}/trifle/latest/`;
+        const userPrefix = this.getUserPrefix(email);
+        const latestPrefix = `${userPrefix}/trifle/latest/`;
         const serverLatest = await this.kvList(latestPrefix, 2);
 
-        // Parse server latest: ["user/{email}/trifle/latest/{trifle_id}/{version_id}", ...]
+        // Parse server latest: ["domain/{domain}/user/{localpart}/trifle/latest/{trifle_id}/{version_id}", ...]
         const serverTriflesMap = new Map();
         for (const key of serverLatest) {
             const parts = key.split('/');
-            if (parts.length >= 6) {
-                const trifleID = parts[4];
-                const versionID = parts[5];
+            if (parts.length >= 8) {
+                const trifleID = parts[6];
+                const versionID = parts[7];
                 serverTriflesMap.set(trifleID, versionID);
             }
         }
@@ -191,6 +326,8 @@ export const SyncManager = {
     async uploadTrifle(email, trifle) {
         console.log('[Sync] Uploading trifle:', trifle.id);
 
+        const userPrefix = this.getUserPrefix(email);
+
         // Get trifle data
         const trifleData = await TrifleDB.getTrifleData(trifle.id);
 
@@ -198,7 +335,7 @@ export const SyncManager = {
         const versionID = `version_${trifle.current_hash.substring(0, 16)}`;
 
         // Upload version data
-        const versionKey = `user/${email}/trifle/version/${versionID}`;
+        const versionKey = `${userPrefix}/trifle/version/${versionID}`;
         const versionData = {
             trifle_id: trifle.id,
             name: trifleData.name,
@@ -223,7 +360,7 @@ export const SyncManager = {
         }
 
         // Update latest pointer
-        const latestKey = `user/${email}/trifle/latest/${trifle.id}/${versionID}`;
+        const latestKey = `${userPrefix}/trifle/latest/${trifle.id}/${versionID}`;
         await this.kvPutRaw(latestKey, ''); // Empty value
 
         console.log('[Sync] Uploaded trifle successfully');
@@ -286,7 +423,8 @@ export const SyncManager = {
 
     // Get trifle version data
     async getTrifleVersion(email, versionID) {
-        const versionKey = `user/${email}/trifle/version/${versionID}`;
+        const userPrefix = this.getUserPrefix(email);
+        const versionKey = `${userPrefix}/trifle/version/${versionID}`;
         return await this.kvGet(versionKey);
     },
 
@@ -369,6 +507,20 @@ export const SyncManager = {
             return await response.json();
         } catch (error) {
             console.error('[Sync] KV LIST error:', prefix, error);
+            throw error;
+        }
+    },
+
+    async kvDelete(key) {
+        try {
+            const response = await fetch(`/kv/${key}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok && response.status !== 404) {
+                throw new Error(`KV DELETE failed: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('[Sync] KV DELETE error:', key, error);
             throw error;
         }
     }
